@@ -25,10 +25,10 @@
 #include "CustomAtomTypesTester.h"
 
 #include <opencog/atomspace/AtomSpace.h>
-#include <opencog/atoms/base/Link.h>
-#include <opencog/atoms/base/Node.h>
-#include <opencog/atoms/base/types.h>
-#include <opencog/cogserver/server/CogServer.h>
+#include <opencog/atomspace/Link.h>
+#include <opencog/atomspace/Node.h>
+#include <opencog/atomspace/types.h>
+#include <opencog/server/CogServer.h>
 #include <opencog/util/Logger.h>
 
 #include "examples/atomtypes/atom_types.h"
@@ -43,33 +43,53 @@ void CustomAtomTypesTester::createAtoms()
 
     Handle number_handle = as.add_node(NUMBER_NODE,"1");
     logger().info("[CustomAtomTypesTester] new node: %s (%d)",
-            number_handle->toString().c_str(), number_handle.value());
+            as.atom_as_string(number_handle).c_str(), number_handle.value());
 
-    Handle foo_handle = as.add_node(FOO_NODE, "foo");
+    Handle region_handle = as.add_node(REGION_NODE, "region");
     logger().info("[CustomAtomTypesTester] new node: %s (%d)",
-            foo_handle->toString().c_str(), foo_handle.value());
+            as.atom_as_string(region_handle).c_str(), region_handle.value());
+
+    Handle array_handle = as.add_node(ARRAY_NODE, "array");
+    logger().info("[CustomAtomTypesTester] new node: %s (%d)",
+            as.atom_as_string(array_handle).c_str(), array_handle.value());
+
+    Handle spatiotemporalnetwork_handle = as.add_node(SPATIOTEMPORALNETWORK_NODE, "spatiotemporalnetwork");
+    logger().info("[CustomAtomTypesTester] new node: %s (%d)",
+            as.atom_as_string(spatiotemporalnetwork_handle).c_str(), spatiotemporalnetwork_handle.value());
+
 
     Handle bar_handle = as.add_node(BAR_NODE, "bar");
     logger().info("[CustomAtomTypesTester] new node: %s (%d)",
-            bar_handle->toString().c_str(), bar_handle.value());
+            as.atom_as_string(bar_handle).c_str(), bar_handle.value());
 
     std::vector<Handle> v;
-    v.push_back(foo_handle);
+    v.push_back(array_handle);
+    v.push_back(spatiotemporalnetwork_handle);
+    v.push_back(region_handle);
     v.push_back(bar_handle);
     Handle foobar_handle = as.add_link(FOOBAR_LINK, v);
     logger().info("[CustomAtomTypesTester] new link: %s (%d)",
-            foobar_handle->toString().c_str(), foobar_handle.value());
+            as.atom_as_string(foobar_handle).c_str(), foobar_handle.value());
+
+
+    Handle regionchild_handle = as.add_link(REGIONCHILD_LINK, v);
+    logger().info("[CustomAtomTypesTester] new link: %s (%d)",
+            as.atom_as_string(regionchild_handle).c_str(), regionchild_handle.value());
+
+    Handle regionneighbor_handle = as.add_link(REGIONNEIGHBOR_LINK, v);
+    logger().info("[CustomAtomTypesTester] new link: %s (%d)",
+            as.atom_as_string(regionneighbor_handle).c_str(), regionneighbor_handle.value());
 
     Handle list_handle = as.add_link(LIST_LINK, v);
     logger().info("[CustomAtomTypesTester] new link: %s (%d)",
-            list_handle->toString().c_str(), list_handle.value());
+            as.atom_as_string(list_handle).c_str(), list_handle.value());
 }
 
 static void dumpHandleSeq(HandleSeq& hs, const char *id)
 {
-    for (const Handle& handle: hs) {
+    for( Handle handle: hs) {
         logger().info("[CustomAtomTypesTester] %s: %s",
-                id, handle->toString().c_str());
+                id, server().getAtomSpace().atom_as_string(handle).c_str());
     }
 }
 
@@ -86,6 +106,12 @@ void CustomAtomTypesTester::dumpAtoms()
     hs.clear();
     as.get_handles_by_type(back_inserter(hs), FOOBAR_LINK);
     dumpHandleSeq(hs, "foobar link");
+    hs.clear();
+    as.get_handles_by_type(back_inserter(hs), REGIONCHILD_LINK);
+    dumpHandleSeq(hs, "regionchild link");
+    hs.clear();
+    as.get_handles_by_type(back_inserter(hs), REGIONNEIGHBOR_LINK);
+    dumpHandleSeq(hs, "regionneighbor link");
     hs.clear();
     as.get_handles_by_type(back_inserter(hs), UNORDERED_LINK, true);
     dumpHandleSeq(hs, "unordered link");
