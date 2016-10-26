@@ -8,6 +8,9 @@ from mappers import *
 from flask.ext.restful.utils import cors
 from flask_restful_swagger import swagger
 
+# Temporary hack
+from web.api.utilities import get_atoms_by_name
+
 # If the system doesn't have these dependencies installed, display a warning
 # but allow the API to load
 try:
@@ -26,6 +29,7 @@ class AtomCollectionAPI(Resource):
         return cls
 
     def __init__(self):
+        self.atom_map = global_atom_map
         self.reqparse = reqparse.RequestParser()
         self.reqparse.add_argument(
             'type', type=str, location='args', choices=types.__dict__.keys())
@@ -296,7 +300,7 @@ class AtomCollectionAPI(Resource):
 
         if id != "":
             try:
-                atom = self.atomspace.get_atom_with_uuid(id)
+                atom = self.atom_map.get_atom(int(id))
                 atoms = [atom]
             except IndexError:
                 atoms = []
@@ -326,8 +330,10 @@ class AtomCollectionAPI(Resource):
                     atoms = self.atomspace.get_atoms_by_type(
                         types.__dict__.get(type))
                 else:
-                    abort(400, 'Invalid request: get atoms by name no longer'
-                    		   ' supported')
+                    if type is None:
+                        type = 'Node'
+                    atoms = get_atoms_by_name(types.__dict__.get(type),
+                                name, self.atomspace)
 
             # Optionally, filter by TruthValue
             if tv_strength_min is not None:
@@ -359,6 +365,7 @@ class AtomCollectionAPI(Resource):
         # DOT return format is also supported
         if dot_format not in ['True', 'true', '1']:
             atom_list = AtomListResponse(atoms)
+            # xxxxxxxxxxxx here add atoms
             json_data = {'result': atom_list.format()}
 
             # if callback function supplied, pad the JSON data (i.e. JSONP):
@@ -521,8 +528,10 @@ the atom. Example:
 
         # Outgoing set
         if 'outgoing' in data:
+            print data
             if len(data['outgoing']) > 0:
-                outgoing = [Atom(uuid) for uuid in data['outgoing']]
+                outgoing = [self.atom_map.get_atom(uid)
+                                for uid in data['outgoing']]
         else:
             outgoing = None
 
@@ -542,11 +551,14 @@ the atom. Example:
 
         try:
             atom = self.atomspace.add(t=type, name=name, tv=tv, out=outgoing)
+            uid = self.atom_map.get_uid(atom)
         except TypeError:
             abort(500, 'Error while processing your request. Check your '
                        'parameters.')
 
-        return {'atoms': marshal(atom, atom_fields)}
+        dictoid = marshal(atom, atom_fields)
+        dictoid['handle'] = uid
+        return {'atoms': dictoid}
 
     @swagger.operation(
 	notes='''
@@ -669,7 +681,9 @@ containing the atom.
         Updates the AttentionValue (STI, LTI, VLTI) or TruthValue of an atom
         """
 
-        if Atom(id) not in self.atomspace:
+        # If the atom is not found in the atomspace.
+        the_atom = self.atom_map.get_atom(id)
+        if the_atom == None:
             abort(404, 'Atom not found')
 
         # Prepare the atom data
@@ -681,14 +695,15 @@ containing the atom.
 
         if 'truthvalue' in data:
             tv = ParseTruthValue.parse(data)
-            self.atomspace.set_tv(h=Atom(id), tv=tv)
+            the_atom.tv = tv
 
         if 'attentionvalue' in data:
             (sti, lti, vlti) = ParseAttentionValue.parse(data)
-            self.atomspace.set_av(h=Atom(id), sti=sti, lti=lti, vlti=vlti)
+            the_atom.av = {'sti': sti, 'lti': lti, 'vlti': vlti}
 
-        atom = self.atomspace.get_atom_with_uuid(id)
-        return {'atoms': marshal(atom, atom_fields)}
+        dicty = marshal(the_atom, atom_fields)
+        dicty['handle'] = self.atom_map.get_uid(the_atom)
+        return {'atoms': dicty}
 
     @swagger.operation(
 	notes='''
@@ -727,11 +742,11 @@ Returns a JSON representation of the result, indicating success or failure.
         Removes an atom from the AtomSpace
         """
 
-        if Atom(id) not in self.atomspace:
+        atom = self.atom_map.get_atom(id)
+        if atom == None:
             abort(404, 'Atom not found')
-        else:
-            atom = atomspace.get_atom_with_uuid(id)
 
         status = self.atomspace.remove(atom)
+        self.atom_map.remove(atom, id)
         response = DeleteAtomResponse(id, status)
         return {'result': response.format()}

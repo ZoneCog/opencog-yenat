@@ -311,6 +311,16 @@
 )
 
 ; --------------------------------------------------------------------
+(define-public (parse-get-interp parse-node)
+"
+  parse-get-interp    Get the interpretations of the parse.
+
+  Returns the InterpretationNodes associated with a ParseNode.
+"
+    (cog-chase-link 'InterpretationLink 'InterpretationNode parse-node)
+)
+
+; --------------------------------------------------------------------
 (define-public (interp-get-r2l-outputs interp-node)
 "
   interp-get-r2l-outputs    Get all R2L outputs in an Interpretation.
@@ -324,7 +334,7 @@
 ; --------------------------------------------------------------------
 (define-public (interp-get-parse interp)
 "
-  interp-get-parse    Get the Interpretation of a Parse.
+  interp-get-parse    Get the parse that resulted in the given interpretation.
 
   Returns the ParseNode associated with an InterpretationNode.
 "
@@ -879,6 +889,43 @@
 
 (system (string-join (list "echo deleted: " (number->string n) )))
 	)
+)
+
+; ---------------------------------------------------------------------
+(define-public (use-relex-server HOSTNAME PORTNUM)
+"
+  use-relex-server HOSTNAME PORTNUM
+
+  Use the RelEx server found at HOSTNAME:PORTNUM for parsing.
+  Any sentences to be parsed will be sent to this server.
+
+  HOSTNAME can be either a TCPIPv4 hostname or IP address, for example,
+  \"foo.bar.org\" or \"localhost\" or \"127.0.0.1\".
+
+  PORTNUM must be a numeric port number in the range 1-65535
+
+  The IP address is returned.  If the HOSTNAME is invalid, the
+  currently-set server is not changed, and an exception is thrown.
+"
+	(define hosty (gethost HOSTNAME))
+	(set! relex-server-host
+		(inet-ntop (hostent:addrtype hosty)
+			(car (hostent:addr-list hosty))))
+
+	; Basic sanity check.
+	(if (not (exact-integer? PORTNUM)) (throw 'bad-portnum))
+	(set! relex-server-port PORTNUM)
+	relex-server-host
+)
+
+(define-public (set-relex-server-host)
+"
+  Sets the relex-server address. To be used only in a docker setup.
+"
+	(catch
+		#t
+		(lambda () (use-relex-server "relex" 4444))
+		(lambda (key . rest) relex-server-host))
 )
 
 ; =============================================================
