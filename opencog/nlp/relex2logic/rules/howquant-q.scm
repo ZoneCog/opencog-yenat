@@ -12,10 +12,7 @@
 			(word-in-parse "$qVar" "$a-parse")
 			(word-in-parse "$noun" "$a-parse")
 			(dependency "_quantity" "$noun" "$qVar")
-			(InheritanceLink
-				(VariableNode "$qVar")
-				(DefinedLinguisticConceptNode "how_much")
-			)
+			(word-feat "$qVar" "how_much")
 		)
 		(ExecutionOutputLink
 			(GroundedSchemaNode "scm: pre-howquant-q-rule")
@@ -28,6 +25,6 @@
 
 ; This is function is not needed. It is added so as not to break the existing
 ; r2l pipeline.
-(define (pre-howquant-q-rule noun)
+(define-public (pre-howquant-q-rule noun)
 	(howquantQ-rule (cog-name (word-inst-get-lemma noun)) (cog-name noun))
 )

@@ -5,10 +5,12 @@ microplanner's output.  The microplanner also uses SuReal to determine
 whether a chunk (a set of atoms) can be translated into a sentence;
 thus, these two projects are dependent on each other.
 
-Sureal requires Link Grammar, RelEx, and RelEx2Logic outputs.
+Sureal requires Link Grammar (LG), RelEx, and RelEx2Logic outputs.
 
-The main function is `sureal` which takes in a `SetLink` and returns a
-sentence.
+The main functions are `sureal` and `cached-sureal`. The former takes in a `SetLink` and returns a
+sentence while the latter takes in a SetLink and return whether it succeeded building a proper sentence or
+not (but the sentence itself is not returned). The point of `cached-sureal` is that it is optimized
+to be used inside the Microplanner while `sureal` is supposed to be used by other general-porpose applications.
 
 The words used in the input `SetLink` need to have the corresponding
 `WordNode` before calling `sureal`.
@@ -17,22 +19,46 @@ For example, you can do
 
 ```
 (nlp-parse "He eats.")
-(nlp-parse "He eats quickly.")
-(WordNode "she")
-(WordNode "drinks")
-(sureal (SetLink (EvaluationLink (PredicateNode "drinks") (ListLink (ConceptNode "she")))))
+(nlp-parse "She eats quickly.")
+(nlp-parse "Nobody drank it.")
+(nlp-parse "It drinks water.")
+
+(sureal (SetLink (EvaluationLink (PredicateNode "drink") (ListLink (ConceptNode "she")))))
 ```
-which will return all possible sentence is words list, like
+
+and it will return
 
 ```
-((she drinks quickly .) (she drinks .))
+(("she" "drinks" "."))
 ```
-or just
+
+which is the best match of the above.
+
+Also you can specify the tense of the verb by doing
+
 ```
-((she drinks .))
+(sureal (SetLink (EvaluationLink (PredicateNode "drink") (ListLink (ConceptNode "she")))
+    (InheritanceLink (PredicateNode "drink") (DefinedLinguisticConceptNode "past"))))
 ```
-due to some internal algorithm that will stop if it find a "good enough"
-solution.
+
+which will return
+
+```
+(("she" "drank" "it" "."))
+```
+
+
+**Note:**
+Before generating sentences using SuReal, we have to make sure that the
+words we are expecting exist in the AtomSpace (and are in correct grammatical
+forms). For example, if we want to generate "she drinks" as in the above
+example, we have to make sure the words "she" and "drinks" are there in advance.
+Similarily in the second example, we have to make sure "she" and "drank" exist.
+Otherwise SuReal will return nothing. The recommended way to "add the words"
+into the AtomSpace is to parse sentences that actually contain those words.
+In this case, they are "She eats quickly.", "It drinks water." and
+"Nobody drank it." respectively.
+
 
 ## Algorithm
 
@@ -70,8 +96,8 @@ links of the style:
 
 ```
 
-are generated.  They contain all the information of the LG connectors
-used for a particalar word of a particalar sentence.
+are generated.  They contain all the information the LG connectors
+used for a particular word of a particular sentence.
 
 Given a new `SetLink` as input, SuReal matches each atom in the link to
 the structure inside the old sentences.  In addition, for each node that
@@ -106,7 +132,7 @@ to link the two words in the sentence.
    )
 )
 ```
-The `LgLinkInstanceLink` further explain the `EvaluationLink` by
+The `LgLinkInstanceLink` further explains the `EvaluationLink` by
 indicating what the original LG connector is.  For example, "the" is
 using "D+" to connect with "Ds**c-" of "man".
 

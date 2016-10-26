@@ -51,9 +51,14 @@
 (define (lambda-grounded-construction-formula lamb)
   (let* ((lamb-outgoings (cog-outgoing-set lamb))
          (body (cadr lamb-outgoings))
-         (body-tv (cog-tv body)))
+          (body-tv (cog-tv body)))
     (cog-set-tv! lamb body-tv)))
 
+;; The following are for checking that an atom (i.e. a sub-hypergraph)
+;; doesn't have free variables.
+;;
+;; TODO this should be replaced by a scheme binding from a C++
+;; function, given how frequent its use should be.
 (define (is-variable atom)
   (equal? (cog-type atom) 'VariableNode))
 
@@ -66,3 +71,9 @@
   (if (rec-fully-grounded atom)
       (stv 1 1)
       (stv 0 1)))
+
+;; Name the rule
+(define lambda-grounded-construction-rule-name
+  (DefinedSchemaNode "lambda-grounded-construction-rule"))
+(DefineLink lambda-grounded-construction-rule-name
+  lambda-grounded-construction-rule)

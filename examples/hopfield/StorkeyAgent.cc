@@ -43,7 +43,7 @@ using namespace std;
 
 StorkeyAgent::StorkeyAgent(CogServer& cs) : Agent(cs)
 {
-    static const std::string defaultConfig[] = {
+    static const std::vector<std::string> defaultConfig = {
         "ECAN_CONVERT_LINKS","false",
         "",""
     };
@@ -275,7 +275,7 @@ void StorkeyAgent::storkeyUpdate()
         }
         newWeights.push_back(iRow);
     }
-    if (getLogger()->isFineEnabled()) {
+    if (getLogger()->is_fine_enabled()) {
         getLogger()->fine("Weight matrix after Storkey update rule applied:");
         printWeights(newWeights);
     }

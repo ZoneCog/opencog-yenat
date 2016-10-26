@@ -12,10 +12,7 @@
 			(word-in-parse "$qVar" "$a-parse")
 			(word-in-parse "$pred" "$a-parse")
 			(dependency "_%howdeg" "$pred" "$qVar")
-			(InheritanceLink
-				(VariableNode "$qVar")
-				(DefinedLinguisticConceptNode "how_much")
-			)
+			(word-feat "$qVar" "how_much")
 		)
 		(ExecutionOutputLink
 			(GroundedSchemaNode "scm: pre-howdeg-q-rule")
@@ -28,6 +25,6 @@
 
 ; This is function is not needed. It is added so as not to break the existing
 ; r2l pipeline.
-(define (pre-howdeg-q-rule pred)
+(define-public (pre-howdeg-q-rule pred)
 	(howdegQ-rule (cog-name (word-inst-get-lemma pred)) (cog-name pred))
 )

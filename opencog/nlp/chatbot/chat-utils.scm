@@ -18,6 +18,103 @@
              (opencog nlp microplanning)
              (opencog nlp relex2logic))
 
+(use-modules (opencog logger))
+
+; -----------------------------------------------------------------------
+
+(use-modules (opencog) (opencog python) (opencog exec))
+
+(python-eval "
+from opencog.atomspace import AtomSpace, types, TruthValue
+
+have_sentiment_analysis = True
+try:
+      import basic_sentiment_analysis
+except ImportError:
+      have_sentiment_analysis = False
+
+atomspace = ''
+
+def set_atomspace(atsp):
+      global atomspace
+      atomspace = atsp
+      return TruthValue(1, 1)
+
+def call_sentiment_parse(text_node, sent_node):
+      global atomspace
+      global have_sentiment_analysis
+
+      if not have_sentiment_analysis:
+          return TruthValue(1, 1)
+
+      sentiment_score = basic_sentiment_analysis.sentiment_parse(text_node.name)
+      if sentiment_score > 0:
+          positive_node = atomspace.add_node(types.ConceptNode, 'Positive')
+          atomspace.add_link(types.InheritanceLink, [sent_node, positive_node])
+      elif sentiment_score < 0:
+          negative_node = atomspace.add_node(types.ConceptNode, 'Negative')
+          atomspace.add_link(types.InheritanceLink, [sent_node, negative_node])
+      else:
+          neutral_node = atomspace.add_node(types.ConceptNode, 'Neutral')
+          atomspace.add_link(types.InheritanceLink, [sent_node, neutral_node])
+
+      return TruthValue(1, 1)
+")
+
+; -----------------------------------------------------------------------
+; TODO: Replace these time related utilities with one from TimeMap, when it is
+; ready.
+(define time-domain (TimeDomainNode "Dialogue-System"))
+
+(define (sent-set-time sent)
+"
+  Associate time to the last sentence
+"
+    (AtTimeLink
+        ; FIXME: maybe opencog's internal time octime should
+        ; be used. Will do for now, assuming a single instance
+        ; deals with a single conversation.
+        (TimeNode (number->string (current-time)))
+        sent
+        time-domain)
+)
+
+(define-public (get-last-said-sent)
+"
+  Returns the SentenceNode of the last said sentence or returns an empty list.
+"
+    (define query
+        (Get
+            (VariableList
+                (TypedVariableLink
+                    (Variable "tn")
+                    (TypeNode "TimeNode"))
+                (TypedVariableLink
+                    (Variable "s")
+                    (TypeNode "SentenceNode")))
+            (AtTimeLink
+                (Variable "tn")
+                (Variable "s")
+                time-domain)))
+
+    (define last-time 0)
+    (define result '())
+    (define (last-sent sent)
+        (let ((sent-time (string->number (cog-name (gar sent)))))
+            (if (>= sent-time last-time)
+                (begin
+                    (set! last-time sent-time)
+                    (set! result (gdr sent)))
+            )
+        ))
+
+    (let ((sents (cog-execute! query)))
+        (for-each last-sent (cog-outgoing-set sents))
+        (cog-delete sents)
+        result
+    )
+)
+
 ; -----------------------------------------------------------------------
 (define (r2l-parse sent)
 "
@@ -34,16 +131,18 @@
 
   SENT must be a SentenceNode.
 "
-    (define (cog-delete-parent a-link)
+    (define (cog-extract-parent a-link is-from-fc)
         ; Many rules return a ListLink of results that they
-        ; generated. Some rules return singletons.  If A-LINK
-        ; is a ListLink, then delete it and return a list of
+        ; generated. Some rules return singletons. And the
+        ; Forward Chainer uses a SetLink to wrap all these
+        ; results. So if A-LINK is a ListLink or is directly
+        ; from the FC, then delete it and return a list of
         ; its contents, else return a list holding A-LINK.
         ;
         ; XXX maybe this should be part of the ure module??
-        (if (equal? 'ListLink (cog-type a-link))
+        (if (or (equal? 'ListLink (cog-type a-link)) is-from-fc)
             (let ((returned-list (cog-outgoing-set a-link)))
-                    (cog-delete a-link)
+                    (cog-extract a-link)
                     returned-list)
             (list a-link))
     )
@@ -58,9 +157,9 @@
         (define focus-set
             (SetLink (parse-get-relex-outputs parse-node) interp-link))
         (define outputs
-            (cog-delete-parent (cog-fc (SetLink) r2l-rules focus-set)))
+            (cog-extract-parent (cog-fc (SetLink) r2l-rules focus-set) #t))
 
-        (append-map cog-delete-parent outputs)
+        (append-map (lambda (o) (cog-extract-parent o #f)) outputs)
     )
 
     (define (interpret parse-node)
@@ -83,13 +182,7 @@
             (ReferenceLink interp-node result)
 
             ; Time stamp the parse
-            (AtTimeLink
-                ; FIXME: maybe opencog's internal time octime should
-                ; be used. Will do for now, assuming a single instance
-                ; deals with a single conversation.
-                (TimeNode (number->string (current-time)))
-                interp-node
-                (TimeDomainNode "Dialogue-System"))
+            (sent-set-time sent)
 
             result
         )
@@ -103,48 +196,106 @@
 "
   r2l-count SENT -- maintain counts of R2L statistics for SENT-LIST.
 "
-	; Increment the R2L's node count value
-	(parallel-map-parses
-		(lambda (p)
-			; The preferred algorithm is
-			; (1) get all non-abstract nodes
-			; (2) delete duplicates
-			; (3) get the corresponding abstract nodes
-			; (4) update count
-			(let* ((all-nodes (append-map cog-get-all-nodes (parse-get-r2l-outputs p)))
-			       ; XXX FIXME this is undercounting since each abstract node can have
-			       ; multiple instances in a sentence.  Since there is no clean way
-			       ; to get to the abstracted node from an instanced node yet, such
-			       ; repeatition are ignored for now
-			       (abst-nodes (delete-duplicates (filter is-r2l-abstract? all-nodes))))
-				(par-map
-					(lambda (n)
-						(let* ((atv (cog-tv->alist (cog-tv n)))
-								(mean (assoc-ref atv 'mean))
-								(conf (assoc-ref atv 'confidence))
-								(count (assoc-ref atv 'count))
-								; STV will have count value as well, so checking type
-								; to see whether we want that count value
-								(ntv
-									(if (cog-ptv? (cog-tv n))
-										(cog-new-ptv mean conf (+ count 1))
-										(cog-new-ptv mean conf 1))
-								))
-							(cog-set-tv! n ntv)
-						)
-					)
-					abst-nodes
-				)
-			)
-		)
-		sent-list
-	)
+    (define (update-tv nodes)
+        ; DEFAULT_TV and DEFAULT_K as defined in TruthValue.cc
+        (let ((default-stv (stv 1 0))
+              (default-k 800))
+            (par-map
+                (lambda (n)
+                    (if (equal? (cog-tv n) default-stv)
+                        (let ((new-mean (/ 1 (cog-count-atoms (cog-type n))))
+                              (new-conf (/ 1 (+ 1 default-k))))
+                            (cog-set-tv! n (cog-new-stv new-mean new-conf))
+                        )
+                        (let* ((current-count (round (assoc-ref (cog-tv->alist (cog-tv n)) 'count)))
+                               (new-count (+ current-count 1))
+                               (new-mean (/ new-count (cog-count-atoms (cog-type n))))
+                               (new-conf (/ new-count (+ new-count default-k))))
+                            (cog-set-tv! n (cog-new-stv new-mean new-conf))
+                        )
+                    )
+                )
+                nodes
+            )
+        )
+    )
+
+    ; Increment the R2L's node count value
+    (parallel-map-parses
+        (lambda (p)
+            ; The preferred algorithm is
+            ; (1) get all non-abstract nodes
+            ; (2) delete duplicates
+            ; (3) get the corresponding abstract nodes
+            ; (4) update count
+            (let* ((all-nodes (append-map cog-get-all-nodes (parse-get-r2l-outputs p)))
+                   ; XXX FIXME this is undercounting since each abstract node can have
+                   ; multiple instances in a sentence.  Since there is no clean way
+                   ; to get to the abstracted node from an instanced node yet, such
+                   ; repeatition are ignored for now
+                   (abst-nodes (delete-duplicates (filter is-r2l-abstract? all-nodes)))
+                   (word-nodes (append-map word-inst-get-word (parse-get-words p))))
+                (update-tv abst-nodes)
+                (update-tv word-nodes)
+            )
+        )
+        sent-list
+    )
+)
+
+; -----------------------------------------------------------------------
+; Control variable used to switch stimulation of WordNodes and
+; WordInstanceNodes on parsing. This shouldn't be public.
+(define nlp-stimulate-parses #f)
+
+; The sti value that WordNodes and WordInstanceNodes are stimulated with.
+(define nlp-stimulation-value 0)
+
+; -----------------------------------------------------------------------
+(define-public (nlp-start-stimulation STIMULUS)
+"
+  Switchs on the stimulation of WordNodes and WordInstanceNodes during parse
+  by STI amount.
+"
+    (set! nlp-stimulation-value STIMULUS)
+    (set! nlp-stimulate-parses #t)
+)
+
+; -----------------------------------------------------------------------
+(define-public (nlp-stimuating?)
+"
+  Returns #t if nlp-stimuation of parse is taking place and #f if not.
+"
+    nlp-stimulate-parses
+)
+
+; -----------------------------------------------------------------------
+(define-public (nlp-stop-stimulation)
+"
+  Switchs off the stimulation of WordNodes and WordInstanceNodes during parse.
+"
+    (set! nlp-stimulate-parses #f)
+)
+
+; -----------------------------------------------------------------------
+(define (nlp-stimulate SENT STIMULUS)
+"
+  Stimulate the WordNodes and WordInstanceNodes associated with the SentenceNode
+  SENT by STI amount.
+"
+    (define (stimulate x) (cog-stimulate x STIMULUS))
+    (let* ((word-inst-list
+                (append-map parse-get-words (sentence-get-parses SENT)))
+           (word-list (append-map word-inst-get-word word-inst-list)))
+        (map stimulate word-inst-list)
+        (map stimulate word-list)
+    )
 )
 
 ; -----------------------------------------------------------------------
 (define-public (nlp-parse plain-text)
 "
-  nlp-parse -- Wrap most of the NLP pipeline in one function.
+  nlp-parse PLAIN-TEXT -- Wrap most of the NLP pipeline in one function.
 
   Call the necessary functions for the full NLP pipeline.
 "
@@ -166,6 +317,15 @@
 
 		; Perform the R2L processing.
 		(r2l-parse (car sent-list))
+
+        ; Stimulate WordNodes and WordInstanceNodes
+        (if nlp-stimulate-parses
+            (nlp-stimulate (car sent-list) nlp-stimulation-value))
+
+    ; Testing the Sentiment_eval function
+    (cog-logger-info "nlp-parse: testing Sentiment_eval")
+    (python-call-with-as "set_atomspace" (cog-atomspace))
+    (cog-evaluate! (Evaluation (GroundedPredicate "py: call_sentiment_parse") (List (Node plain-text) (car sent-list))))
 
 		; Track some counts needed by R2L.
 		(r2l-count sent-list)

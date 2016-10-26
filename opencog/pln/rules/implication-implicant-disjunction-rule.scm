@@ -48,7 +48,7 @@
         (GroundedSchemaNode "scm: implication-implicant-disjunction-formula")
         (ListLink
            (ImplicationLink
-              (OrLink
+              (cog-new-flattened-link 'OrLink
                  (VariableNode "$A")
                  (VariableNode "$B")
               )
@@ -85,6 +85,7 @@
 ;; P(C|A U B) = P(C,A U B)/P(A U B)
 ;; = (P(C,A)+P(C,B)-P(C,A,B))/P(A U B)
 ;;
+;; TODO: this is wrong, the assumption should be P(A,B|C) = P(A|C)*P(B|C)
 ;; Let's assume that P(C,A,B) = P(C,A)*P(C,B), then we can write
 ;;
 ;; P(C|A U B) = (P(C|A)*P(A) + P(C|B)*P(B) - P(C|A)*P(A)*P(C|B)*P(B)

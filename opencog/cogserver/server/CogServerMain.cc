@@ -48,7 +48,8 @@
 using namespace opencog;
 using namespace std;
 
-static const char* DEFAULT_CONFIG_FILENAME = "opencog.conf";
+static const char* DEFAULT_CONFIG_FILENAME = "cogserver.conf";
+static const char* DEFAULT_CONFIG_ALT_FILENAME = "opencog.conf";
 static const char* DEFAULT_CONFIG_PATHS[] = 
 {
     // Search order for the config file:
@@ -74,7 +75,7 @@ static void usage(const char* progname)
 // Catch and report sigsegv
 void sighand(int sig)
 {
-    logger().setPrintToStdoutFlag(true);
+    logger().set_print_to_stdout_flag(true);
     logger().error() << "Caught signal " << sig << " (" << strsignal(sig)
         << ") on thread " << std::this_thread::get_id();
     logger().flush();
@@ -142,6 +143,7 @@ int main(int argc, char *argv[])
 
     }
 
+    // First, search for the standard config file.
     if (configFiles.size() == 0) {
         // search for configuration file on default locations
         for (int i = 0; DEFAULT_CONFIG_PATHS[i] != NULL; ++i) {
@@ -150,41 +152,61 @@ int main(int argc, char *argv[])
             if (boost::filesystem::exists(configPath)) {
                 cerr << "Using default config at " << configPath.string() << endl;
                 configFiles.push_back(configPath.string());
+
+                // Use the *first* config file found! We don't want to
+                // load both the installed system config file, and also
+                // any config file found in the build directory. We
+                // ESPECIALLY don't want to load the system config file
+                // after the development config file, thus clobbering
+                // the contents of the devel config file!
+                break;
             }
         }
     }
+
+    // Next, search for alternate config file.
+    if (configFiles.size() == 0) {
+        // search for configuration file on default locations
+        for (int i = 0; DEFAULT_CONFIG_PATHS[i] != NULL; ++i) {
+            boost::filesystem::path configPath(DEFAULT_CONFIG_PATHS[i]);
+            configPath /= DEFAULT_CONFIG_ALT_FILENAME;
+            if (boost::filesystem::exists(configPath)) {
+                cerr << "Using default config at " << configPath.string() << endl;
+                configFiles.push_back(configPath.string());
+
+                // Use the *first* config file found! We don't want to
+                // load both the installed system config file, and also
+                // any config file found in the build directory. We
+                // ESPECIALLY don't want to load the system config file
+                // after the development config file, thus clobbering
+                // the contents of the devel config file!
+                break;
+            }
+        }
+    }
+
     config().reset();
     if (configFiles.size() == 0) {
         cerr << "No config files could be found!" << endl;
         exit(-1);
     }
+
     // Each config file sequentially overwrites the next
     for (const string& configFile : configFiles) {
         try {
             config().load(configFile.c_str(), false);
             break;
         } catch (RuntimeException &e) {
-            std::cerr << e.getMessage() << std::endl;
+            std::cerr << e.get_message() << std::endl;
             exit(1);
         }
     }
+
     // Each specific option
     for (const auto& optionPair : configPairs) {
         //cerr << optionPair.first << " = " << optionPair.second << endl;
         config().set(optionPair.first, optionPair.second);
     }
-
-    // setup global logger
-    if (logger().getFilename() != config()["LOG_FILE"]) {
-	    logger().info() << "Subsequent logging will be redirected to file: "
-	                    << config()["LOG_FILE"];
-    }
-    logger().setFilename(config()["LOG_FILE"]);
-    logger().setLevel(Logger::getLevelFromString(config()["LOG_LEVEL"]));
-    auto level = Logger::getLevelFromString(config()["BACK_TRACE_LOG_LEVEL"]);
-    logger().setBackTraceLevel(level);
-    logger().setPrintToStdoutFlag(config().get_bool("LOG_TO_STDOUT"));
-    //logger().setLevel(Logger::DEBUG);
 
     // Start catching signals
     signal(SIGSEGV, sighand);

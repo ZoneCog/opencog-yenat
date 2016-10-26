@@ -1,5 +1,5 @@
 ;
-; rule-tuils.scm
+; rule-utils.scm
 ;
 ; Some generic rule utilities, not limited to r2l.
 ;
@@ -8,6 +8,10 @@
 ; Short-hand for declaring a variable.
 (define (var-decl var type)
    (TypedVariableLink (VariableNode var) (TypeNode type)))
+
+(define (var-decl-choice var type-a type-b)
+   (TypedVariableLink (VariableNode var)
+		(TypeChoice (TypeNode type-a) (TypeNode type-b))))
 
 (define (word-in-parse word-inst parse)
 "  The WordInstanceNode WORD is in ParseNode PARSE. "

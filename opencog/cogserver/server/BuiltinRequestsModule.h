@@ -79,6 +79,12 @@ DECLARE_CMD_REQUEST(BuiltinRequestsModule, "", do_ctrld,
        "Close the shell TCP/IP connection.\n",
        false, true)
 
+DECLARE_CMD_REQUEST(BuiltinRequestsModule, ".", do_dot,
+       "Close the shell connection",
+       "Usage: .\n\n"
+       "Close the shell TCP/IP connection.\n",
+       false, true)
+
 DECLARE_CMD_REQUEST(BuiltinRequestsModule, "help", do_help,
        "List the available commands or print the help for a specific command",
        "Usage: help [<command>]\n\n"
@@ -99,8 +105,8 @@ DECLARE_CMD_REQUEST(BuiltinRequestsModule, "agents-start", do_startAgents,
        "Start some agents",
        "Usage: agents-start {<agent type>[,<dedicated>[,<thread_name>]]} [...]\n\n"
        "Create new agent instances of the specified agent type(s), and start them.\n"
-       "If <dedicated> is 'yes', the agent will run in a separate thread with"
-       "optional name <thread_name>. If <thread_name> already exists, the agent"
+       "If <dedicated> is 'yes', the agent will run in a separate thread with\n"
+       "optional name <thread_name>. If <thread_name> already exists, the agent\n"
        "will be added to that thread instead of a new thread.\n",
        false, false)
 

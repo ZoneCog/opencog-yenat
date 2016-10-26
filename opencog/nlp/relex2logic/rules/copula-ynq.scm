@@ -14,14 +14,8 @@
 			(word-in-parse "$obj" "$a-parse")
 			(dependency "_subj" "$verb" "$subj")
 			(dependency "_obj" "$verb" "$obj")
-			(LemmaLink
-				(VariableNode "$verb")
-				(WordNode "be")
-			)
-			(InheritanceLink
-				(VariableNode "$verb")
-				(DefinedLinguisticConceptNode "truth-query")
-			)
+			(Lemma (Variable "$verb") (Word "be"))
+			(word-feat "$verb" "truth-query")
 		)
 		(ExecutionOutputLink
 			(GroundedSchemaNode "scm: pre-copula-ynq-rule")
@@ -35,7 +29,7 @@
 
 ; This is function is not needed. It is added so as not to break the existing
 ; r2l pipeline.
-(define (pre-copula-ynq-rule subj obj)
+(define-public (pre-copula-ynq-rule subj obj)
 	(cop-ynQ-rule (cog-name (word-inst-get-lemma subj)) (cog-name subj)
 		(cog-name (word-inst-get-lemma obj)) (cog-name obj)
 	)

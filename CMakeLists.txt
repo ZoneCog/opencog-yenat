@@ -17,6 +17,10 @@ IF (COMMAND CMAKE_POLICY)
 	CMAKE_POLICY(SET CMP0005 OLD)
 ENDIF (COMMAND CMAKE_POLICY)
 
+IF(CMAKE_VERSION VERSION_GREATER 3.0.2)
+	CMAKE_POLICY(SET CMP0037 OLD)
+ENDIF(CMAKE_VERSION VERSION_GREATER 3.0.2)
+
 PROJECT(opencog)
 
 # To supress Cygwin warning "CMake no longer defines WIN32 on Cygwin!"
@@ -263,14 +267,14 @@ ELSE (LAPACK_FOUND)
 ENDIF (LAPACK_FOUND)
 
 
-# Link-Gramar is needed for the Viterbi parser
+# Link-Gramar is needed for the Viterbi parser and more generally NLP
 # Only 4.7.12 or newer has the required read-dict API in it.
 FIND_PACKAGE(LinkGrammar 4.7.12)
 IF (LINK_GRAMMAR_FOUND)
 	SET(HAVE_LINK_GRAMMAR 1)
 	INCLUDE_DIRECTORIES(${LINK_GRAMMAR_INCLUDE_DIRS})
 ELSE (LINK_GRAMMAR_FOUND)
-	MESSAGE(STATUS "Link Grammar missing: needed for the Viterbi parser.")
+	MESSAGE(STATUS "Link Grammar missing: needed for NLP.")
 ENDIF (LINK_GRAMMAR_FOUND)
 
 
@@ -308,7 +312,7 @@ ENDIF (OPENGL_FOUND)
 
 # Google Protobuf library
 # The protocol buffer compiler is a separately installable package, and
-# it is also needed for building embodiment PAI. So check for that, too.
+# it is needed for building the ZMQ messaging subsystem.
 FIND_PACKAGE(Protobuf)
 IF (PROTOBUF_FOUND
 		AND PROTOBUF_LIBRARY
@@ -329,7 +333,7 @@ ELSE (PROTOBUF_FOUND
 	IF (PROTOBUF_PROTOC_EXECUTABLE)
 		SET(PROTOBUF_DIR_MESSAGE "Protobuf was not found; the new message decoding functions would not work.\n   To over-ride, make sure PROTOBUF_LIBRARIES and PROTOBUF_INCLUDE_DIRS are set.")
 	ELSE (PROTOBUF_PROTOC_EXECUTABLE)
-		SET(PROTOBUF_DIR_MESSAGE "Protobuf compiler was not found; embodiment PAI can't be built without it.\n   To over-ride, make sure PROTOBUF_PROTOC_EXECUTABLE is set.")
+		SET(PROTOBUF_DIR_MESSAGE "Protobuf compiler was not found; ZMQ messaging can't be built without it.\n   To over-ride, make sure PROTOBUF_PROTOC_EXECUTABLE is set.")
 	ENDIF (PROTOBUF_PROTOC_EXECUTABLE)
 
 ENDIF (PROTOBUF_FOUND
@@ -405,16 +409,6 @@ ELSE (TBB_FOUND)
 ENDIF (TBB_FOUND)
 MESSAGE(STATUS "${TBB_DIR_MESSAGE}")
 
-FIND_PACKAGE(TCL)
-
-# /usr/bin/tclsh is expected for some embodiment tests, but is
-# not otherwise important for anything...
-IF (TCL_TCLSH)
-	MESSAGE(STATUS "TCL shell was found here: ${TCL_TCLSH}")
-ELSE (TCL_TCLSH)
-	MESSAGE(STATUS "TCL shell missing: needed for some embodiment tests.")
-ENDIF (TCL_TCLSH)
-
 # Optional, currently needed only to hush up DRD in util/Logger.cc
 FIND_PACKAGE(VALGRIND)
 IF (VALGRIND_FOUND)
@@ -461,7 +455,7 @@ IF(HAVE_ATOMSPACE)
 ENDIF(HAVE_ATOMSPACE)
 
 IF(HAVE_ATOMSPACE AND HAVE_GUILE AND HAVE_LINK_GRAMMAR)
-	SET(HAVE_VITERBI 1)
+	SET(HAVE_NLP 1)
 ENDIF(HAVE_ATOMSPACE AND HAVE_GUILE AND HAVE_LINK_GRAMMAR)
 
 IF(HAVE_SERVER AND HAVE_TBB AND HAVE_ZMQ)
@@ -590,6 +584,23 @@ ADD_CUSTOM_TARGET(cscope
 	COMMENT "Generating CScope database"
 )
 
+ADD_SUBDIRECTORY(experiments EXCLUDE_FROM_ALL)
+
+IF (NOT WIN32)
+	ADD_CUSTOM_TARGET (experiments
+		# using CMAKE_BUILD_TOOL results in teh cryptic error message
+		# warning: jobserver unavailable: using -j1.  Add `+' to parent make rule.
+		# This is because make doesn't know how to pass jobserver args to
+		# the submake.  So, instead, just use $(MAKE) (with round parens)
+		# -- that will do the right thing.
+		# COMMAND ${CMAKE_BUILD_TOOL}
+		COMMAND $(MAKE)
+		WORKING_DIRECTORY experiments
+		COMMENT "Building experiments"
+	)
+ENDIF (NOT WIN32)
+
+
 # packaging
 SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The Open Cognition Framework")
 SET(CPACK_PACKAGE_NAME "opencog")
@@ -599,6 +610,7 @@ SET(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 SET(CPACK_PACKAGE_VERSION_MAJOR "0")
 SET(CPACK_PACKAGE_VERSION_MINOR "1")
 SET(CPACK_PACKAGE_VERSION_PATCH "4")
+SET(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
 SET(CPACK_BINARY_STGZ "OFF")
 SET(CPACK_BINARY_TBZ2 "OFF")
 SET(CPACK_BINARY_TGZ "OFF")
@@ -607,9 +619,10 @@ SET(CPACK_SOURCE_STGZ "OFF")
 SET(CPACK_SOURCE_TBZ2 "ON")
 SET(CPACK_SOURCE_TGZ "OFF")
 SET(CPACK_SOURCE_TZ "OFF")
-SET(CPACK_GENERATOR "TBZ2")
+SET(CPACK_PACKAGE_CONTACT "opencog@googlegroups.com")
+SET(CPACK_GENERATOR "TBZ2;DEB")
 SET(CPACK_SOURCE_GENERATOR "TBZ2")
-SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}")
 SET(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}")
 SET(CPACK_SOURCE_IGNORE_FILES
 	"~$"
@@ -644,7 +657,14 @@ SET(CPACK_SOURCE_IGNORE_FILES
 	"^${PROJECT_BINARY_DIR}/opencog/cogserver/server/cogserver$"
 	"^${PROJECT_BINARY_DIR}/examples/server/derivedserver$"
 	"^${PROJECT_BINARY_DIR}/examples/hopfield/hopfield$"
+	"^${PROJECT_SOURCE_DIR}/opencog/python/__init__.py$"
 )
+
+SET(CPACK_PACKAGING_INSTALL_PREFIX "/usr/local")
+SET(CPACK_DEBIAN_PACKAGE_DEPENDS
+    "atomspace (>= 5.0.3)"
+)
+
 SET(CPACK_PACKAGE_INSTALL_DIRECTORY "CMake ${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}")
 IF (WIN32)
 	# Its "not unix" is cygwin is being used.
@@ -682,7 +702,9 @@ SUMMARY_ADD("GTK Visualizer" "GTK3-based Atomspace Visualizer" HAVE_GTK)
 SUMMARY_ADD("Python tests" "Python bindings nose tests" HAVE_NOSETESTS)
 SUMMARY_ADD("REST" "REST Atomspace Publisher module" HAVE_REST)
 SUMMARY_ADD("Server" "The CogServer" HAVE_SERVER)
+SUMMARY_ADD("SpaceTime" "3D Space-Time object tracker" HAVE_OCTOMAP)
 SUMMARY_ADD("Spatial" "Vizualisation of the 3D spacemap" HAVE_SPATIAL_TOOLS AND HAVE_OCTOMAP)
 SUMMARY_ADD("Unit tests" "Unit tests" CXXTEST_FOUND)
-SUMMARY_ADD("Viterbi" "Viterbi Parser for Link Grammar" HAVE_VITERBI)
+SUMMARY_ADD("NLP" "Natural Language Processing" HAVE_NLP)
+SUMMARY_ADD("PatternMiner" "Pattern Miner" HAVE_cpprest)
 SUMMARY_SHOW()
