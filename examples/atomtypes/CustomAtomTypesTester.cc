@@ -45,20 +45,40 @@ void CustomAtomTypesTester::createAtoms()
     logger().info("[CustomAtomTypesTester] new node: %s (%d)",
             number_handle->toString().c_str(), number_handle.value());
 
-    Handle foo_handle = as.add_node(FOO_NODE, "foo");
+    Handle region_handle = as.add_node(REGION_NODE, "region");
     logger().info("[CustomAtomTypesTester] new node: %s (%d)",
-            foo_handle->toString().c_str(), foo_handle.value());
+            region_handle->toString().c_str(), region_handle.value());
+
+    Handle array_handle = as.add_node(ARRAY_NODE, "array");
+    logger().info("[CustomAtomTypesTester] new node: %s (%d)",
+            array_handle->toString().c_str(), array_handle.value());
+
+    Handle spatiotemporalnetwork_handle = as.add_node(SPATIOTEMPORALNETWORK_NODE, "spatiotemporalnetwork");
+    logger().info("[CustomAtomTypesTester] new node: %s (%d)",
+            spatiotemporalnetwork_handle->toString().c_str(), spatiotemporalnetwork_handle.value());
+
 
     Handle bar_handle = as.add_node(BAR_NODE, "bar");
     logger().info("[CustomAtomTypesTester] new node: %s (%d)",
             bar_handle->toString().c_str(), bar_handle.value());
 
     std::vector<Handle> v;
-    v.push_back(foo_handle);
+    v.push_back(array_handle);
+    v.push_back(spatiotemporalnetwork_handle);
+    v.push_back(region_handle);
     v.push_back(bar_handle);
     Handle foobar_handle = as.add_link(FOOBAR_LINK, v);
     logger().info("[CustomAtomTypesTester] new link: %s (%d)",
-            foobar_handle->toString().c_str(), foobar_handle.value());
+           foobar_handle->toString().c_str(), foobar_handle.value());
+
+
+    Handle regionchild_handle = as.add_link(REGIONCHILD_LINK, v);
+    logger().info("[CustomAtomTypesTester] new link: %s (%d)",
+            regionchild_handle->toString().c_str(), regionchild_handle.value());
+
+    Handle regionneighbor_handle = as.add_link(REGIONNEIGHBOR_LINK, v);
+    logger().info("[CustomAtomTypesTester] new link: %s (%d)",
+            regionneighbor_handle->toString().c_str(), regionneighbor_handle.value());
 
     Handle list_handle = as.add_link(LIST_LINK, v);
     logger().info("[CustomAtomTypesTester] new link: %s (%d)",
@@ -67,7 +87,7 @@ void CustomAtomTypesTester::createAtoms()
 
 static void dumpHandleSeq(HandleSeq& hs, const char *id)
 {
-    for (const Handle& handle: hs) {
+    for( Handle handle: hs) {
         logger().info("[CustomAtomTypesTester] %s: %s",
                 id, handle->toString().c_str());
     }
@@ -86,6 +106,12 @@ void CustomAtomTypesTester::dumpAtoms()
     hs.clear();
     as.get_handles_by_type(back_inserter(hs), FOOBAR_LINK);
     dumpHandleSeq(hs, "foobar link");
+    hs.clear();
+    as.get_handles_by_type(back_inserter(hs), REGIONCHILD_LINK);
+    dumpHandleSeq(hs, "regionchild link");
+    hs.clear();
+    as.get_handles_by_type(back_inserter(hs), REGIONNEIGHBOR_LINK);
+    dumpHandleSeq(hs, "regionneighbor link");
     hs.clear();
     as.get_handles_by_type(back_inserter(hs), UNORDERED_LINK, true);
     dumpHandleSeq(hs, "unordered link");
