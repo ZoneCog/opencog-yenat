@@ -46,6 +46,7 @@ void DestinAtomTypesTester::createAtoms()
             number_handle->toString().c_str(), number_handle.value());
 
     Handle region_handle = as.add_node(REGION_NODE, "region");
+
     logger().info("[DestinAtomTypesTester] new node: %s (%d)",
 
             region_handle->toString().c_str(), region_handle.value());
@@ -64,15 +65,19 @@ void DestinAtomTypesTester::createAtoms()
     v.push_back(array_handle);
     v.push_back(spatiotemporalnetwork_handle);
     v.push_back(region_handle);
-    
+
     
     Handle regionchild_handle = as.add_link(REGIONCHILD_LINK, v);
     logger().info("[DestinAtomTypesTester] new link: %s (%d)",
 
+
             regionchild_handle->toString().c_str(), regionchild_handle.value());
 
     Handle regionneighbor_handle = as.add_link(REGIONNEIGHBOR_LINK, v);
+
     logger().info("[DestinAtomTypesTester] new link: %s (%d)",
+
+    
             regionneighbor_handle->toString().c_str(), regionneighbor_handle.value());
 
     Handle list_handle = as.add_link(LIST_LINK, v);
@@ -83,7 +88,10 @@ void DestinAtomTypesTester::createAtoms()
 static void dumpHandleSeq(HandleSeq& hs, const char *id)
 {
     for( Handle handle: hs) {
+
         logger().info("[DestinAtomTypesTester] %s: %s",
+
+        
                 id, handle->toString().c_str());
     }
 }
@@ -98,6 +106,12 @@ void DestinAtomTypesTester::dumpAtoms()
     dumpHandleSeq(hs, "node");
     hs.clear();
     
+    as.get_handles_by_type(back_inserter(hs), REGIONCHILD_LINK);
+    dumpHandleSeq(hs, "regionchild link");
+    hs.clear();
+    as.get_handles_by_type(back_inserter(hs), REGIONNEIGHBOR_LINK);
+    dumpHandleSeq(hs, "regionneighbor link");
+    hs.clear();
     as.get_handles_by_type(back_inserter(hs), REGIONCHILD_LINK);
     dumpHandleSeq(hs, "regionchild link");
     hs.clear();
