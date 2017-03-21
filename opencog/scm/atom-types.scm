@@ -22,6 +22,7 @@
 (load-extension "libspacetime-types" "spacetime_types_init")
 (load-extension "libattention-types" "attention_types_init")
 (load-extension "libembodiment-types" "embodiment_types_init")
+(load-extension "libdestin-types" "destin_types_init")
 
 (add-to-load-path "/usr/local/share/opencog/scm")
 (use-modules (opencog))  ; needed for cog-type->int
@@ -29,3 +30,4 @@
 (load-from-path "spacetime/spacetime_types.scm")
 (load-from-path "attention/attention_types.scm")
 (load-from-path "embodiment/embodiment_types.scm")
+(load-from-path "destin/destin_types.scm")

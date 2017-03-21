@@ -19,6 +19,7 @@ IF (HAVE_SERVER)
 
 	# Will always build types
 	ADD_SUBDIRECTORY (spacetime)
+	
 	IF (HAVE_OCTOMAP)
 		ADD_SUBDIRECTORY (spatial)
 		ADD_SUBDIRECTORY (timeoctomap)
@@ -37,6 +38,6 @@ IF (HAVE_CYTHON)
 ENDIF (HAVE_CYTHON)
 
 ADD_SUBDIRECTORY (embodiment)
-
+ADD_SUBDIRECTORY (destin)
 # Graphics and visualization subsystems
 ADD_SUBDIRECTORY (visualization)
