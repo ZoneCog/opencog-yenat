@@ -29,10 +29,11 @@
 #include <opencog/attention/atom_types.h>
 
 #include <opencog/atomspace/AtomSpace.h>
+#include <opencog/attentionbank/AttentionBank.h>
 
 #include "AFRentCollectionAgent.h"
+#include "AttentionParamQuery.h"
 
-#include <chrono>
 #include <thread>
 //#define DEBUG
 #ifdef DEBUG
@@ -43,9 +44,7 @@ using namespace opencog;
 
 AFRentCollectionAgent::AFRentCollectionAgent(CogServer& cs) : RentCollectionBaseAgent(cs)
 {
-    af_sti_rent_rate = config().get_int("AF_STI_RENT_RATE", 1);
-    af_lti_rent_rate = config().get_int("AF_LTI_RENT_RATE", 1);
-    set_sleep_time(500);
+    last_update      = high_resolution_clock::now();
 }
 
 AFRentCollectionAgent::~AFRentCollectionAgent() {
@@ -54,45 +53,34 @@ AFRentCollectionAgent::~AFRentCollectionAgent() {
 void AFRentCollectionAgent::selectTargets(HandleSeq &targetSetOut)
 {
     std::back_insert_iterator< std::vector<Handle> > out_hi(targetSetOut);
-    _as->get_handle_set_in_attentional_focus(out_hi);
-    /* Without adding this sleep code right below the above method call,
-     * nlp-parse evaluation thread waits for minutes before it gets a chance to
-     * run.
-     */
-    std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-    //std::this_thread::sleep_for(std::chrono::seconds(1));
+    attentionbank(_as).get_handle_set_in_attentional_focus(out_hi);
 }
 
 void AFRentCollectionAgent::collectRent(HandleSeq& targetSet)
 {
-    std::map<Handle, chrono_t<hr_clock>> new_last_update;
+    update_cycle = std::stod(_atq.get_param_value(AttentionParamQuery::af_rent_update_freq));
 
-    for (Handle& h : targetSet) {
-        int sti = h->getAttentionValue()->getSTI();
-        int lti = h->getAttentionValue()->getLTI();
+    // calculate elapsed time Et
+    seconds elapsed_time = duration_cast<seconds>
+                           (high_resolution_clock::now() - last_update);
+    if (elapsed_time.count() <  update_cycle )
+        return;
+
+    int w = elapsed_time.count() / update_cycle;
+
+    for (const Handle& h : targetSet) {
+        int sti = _bank->get_sti(h);
+        int lti = _bank->get_lti(h);
         int stiRent = calculate_STI_Rent();
         int ltiRent = calculate_LTI_Rent();
 
-        if (stiRent > sti)
-            stiRent = sti;
+        if (stiRent > sti) stiRent = sti;
+        if (ltiRent > lti) ltiRent = lti;
 
-        if (ltiRent > lti)
-            ltiRent = lti;
-
-        chrono_t<hr_clock>  now = hr_clock::now(); //seconds ago
-        double time = 1;
-
-        if(last_update.find(h) != last_update.end()){
-            chrono_d diff = now - last_update[h];
-            time = std::chrono::duration_cast<chrono_d>(diff).count();
-        }
-
-        h->setSTI(sti - stiRent*time);  // Assuming STI rent is rent/sec
-        h->setLTI(lti - ltiRent*time);
-
-        new_last_update[h] = now;
+        _bank->set_sti(h, sti - w * stiRent);
+        _bank->set_lti(h, lti - w * ltiRent);
     }
 
-    last_update = new_last_update;
+    // update elapsed time
+    last_update = high_resolution_clock::now();
 }
-

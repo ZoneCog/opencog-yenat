@@ -124,7 +124,7 @@ std::string CogServerSCM::start_server(AtomSpace* as,
 
     // The default config file is installed from
     // $SRCDIR/lib/cogserver.conf and is copied to
-    // /usr/local/etc/cogservedr.conf
+    // /usr/local/etc/cogserver.conf
     // by default. Use it if we can; it has sane file paths in it.
     if (0 < cfg.size())
         config().load(cfg.c_str(), true);
@@ -140,7 +140,6 @@ std::string CogServerSCM::start_server(AtomSpace* as,
 
     // Load modules specified in config
     srvr->loadModules();
-    srvr->loadSCMModules();
 
     // Enable the network server and run the server's main loop
     srvr->enableNetworkServer();

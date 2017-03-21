@@ -22,6 +22,7 @@
 (load "external-sources.scm")
 (load "random-sentence-generator.scm")
 (load "pln-actions.scm")
+(load "chatscript.scm")
 
 ; Load the psi-rules
 (load "psi-rules.scm")
@@ -32,9 +33,6 @@
 
 ; Load pln reasoner
 (load "pln-reasoner.scm")
-
-; Load wholeshow functions and atoms.
-(load "wholeshow.scm")
 
 ; Set relex-server-host
 ; (use-relex-server "localhost" 4444)

@@ -55,14 +55,12 @@ namespace opencog
  * where an extensive explanation of the algorithm, features and pending
  * work is explained.
  */
+class AtomSpace;
 class WAImportanceDiffusionAgent : public ImportanceDiffusionBase
 {
 private:
-    unsigned int SAMPLE_SIZE = 1;
-    unsigned int _tournamentSize;
-
     void spreadImportance();
-    Handle tournamentSelect(HandleSeq population);
+    AttentionValue::sti_t calculateDiffusionAmount(Handle);
 
 public:
     WAImportanceDiffusionAgent(CogServer&);

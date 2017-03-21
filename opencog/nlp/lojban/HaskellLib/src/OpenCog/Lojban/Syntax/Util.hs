@@ -47,6 +47,8 @@ insert = inverse . ignore
 
 iunit = inverse unit
 
+ciunit = iunit . commute
+
 addfst :: a -> Iso b (a,b)
 addfst a = inverse $ rmfst a
 
@@ -59,11 +61,14 @@ rmfst a = iunit . commute .< ignore a
 rmsnd :: a -> Iso (b,a) b
 rmsnd a = iunit .> ignore a
 
-
-choice :: (a -> Iso a b) -> (b -> Iso a b) -> Iso a b
-choice f g = Iso i j where
-    i a = apply (f a) a
-    j b = unapply (g b) b
+choice :: Eq c => [(c,Iso a b)] -> Iso (c,a) b
+choice lst = Iso f g where
+    f (c,a) = let found = F.find (\(k,_) -> c == k) lst
+              in case found of
+                Just (_,iso) -> apply iso a
+                Nothing -> Nothing
+    g b = let Just (c,iso) = F.find (\(c,iso) -> isJust $ unapply iso b) lst
+          in Just (c,fromJust $ unapply iso b)
 
 infixr 8 .>
 infixr 8 .<
@@ -107,7 +112,6 @@ infixr 9 =.
           reorder = Iso rf rg
           rf (((b,s1),(d,s2)),s3) = Just ((b,d),s1++s2++s3)
           rg ((b,d),s)            = Just (((b,s),(d,s)),s)
-
 
 infix 8 |^|
 
@@ -260,7 +264,7 @@ withSeedState r = ReaderT (\e@(_,_,_,seed) ->
 
 ------------------------------------------------------------------------
 letter, digit :: Syntax delta => delta Char
-letter  =  subset (\x -> isLetter x || x=='\'') <$> token
+letter  =  subset (\x -> isLetter x || x=='\'' || x=='.') <$> token
 digit   =  subset isDigit <$> token
 
 anyWord :: Syntax delta => delta String
@@ -338,3 +342,4 @@ optSelmaho s = handle <$> optional (selmaho s)
     where handle = Iso f g where
             f _ = Just ()
             g () = Just Nothing
+
