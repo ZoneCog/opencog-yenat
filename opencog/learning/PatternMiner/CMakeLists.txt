@@ -1,8 +1,8 @@
 # Pattern miner build file.
+ADD_SUBDIRECTORY (types)
 
 IF (HAVE_cpprest)
     ADD_LIBRARY (PatternMiner SHARED
-            Pattern
             HTree
             PatternMiner
             PatternMinerBF
@@ -14,14 +14,12 @@ IF (HAVE_cpprest)
     TARGET_LINK_LIBRARIES (PatternMiner
         ${COGUTIL_LIBRARY}
         ${ATOMSPACE_LIBRARIES}
+        patternminer-types
         ${cpprest_LIBRARY}
         ${Boost_SYSTEM_LIBRARY}
-        ssl
-        crypto
     )
 ELSE (HAVE_cpprest)
     ADD_LIBRARY (PatternMiner SHARED
-            Pattern
             HTree
             PatternMiner
             PatternMinerBF
@@ -31,31 +29,29 @@ ELSE (HAVE_cpprest)
     TARGET_LINK_LIBRARIES (PatternMiner
         ${COGUTIL_LIBRARY}
         ${ATOMSPACE_LIBRARIES}
+        patternminer-types
         ${Boost_SYSTEM_LIBRARY}
-        ssl
-        crypto
     )
 ENDIF (HAVE_cpprest)
 
-ADD_DEPENDENCIES(PatternMiner embodiment_atom_types)
 ADD_DEPENDENCIES(PatternMiner spacetime_atom_types)
 
-
-ADD_LIBRARY(TestPatternMinerAgent SHARED
-	TestPatternMinerAgent
+ADD_LIBRARY(PatternMinerAgent SHARED
+	PatternMinerAgent
 )
 
 
-TARGET_LINK_LIBRARIES (TestPatternMinerAgent
+TARGET_LINK_LIBRARIES (PatternMinerAgent
 	PatternMiner
 )
 
 INSTALL (FILES
-        Pattern.h
-        HTree.h
-        PatternMiner.h
-        DESTINATION "include/${PROJECT_NAME}/learning/PatternMiner"
+	HTree.h
+	PatternMiner.h
+	DESTINATION "include/${PROJECT_NAME}/learning/PatternMiner"
 )
+
+INSTALL (TARGETS PatternMiner DESTINATION "lib${LIB_DIR_SUFFIX}/opencog")
 
 IF (HAVE_cpprest)
 
@@ -81,6 +77,27 @@ IF (HAVE_cpprest)
     )
 
 ENDIF (HAVE_cpprest)
+
+# This defines the guile scheme loadable module
+
+IF (HAVE_GUILE)
+        ADD_LIBRARY (guile-patternminer SHARED
+                PatternMinerSCM
+        )
+
+        TARGET_LINK_LIBRARIES(guile-patternminer
+                PatternMiner
+                ${GUILE_LIBRARIES}
+        )
+
+        INSTALL (TARGETS guile-patternminer DESTINATION "lib${LIB_DIR_SUFFIX}/opencog")
+
+	
+
+       
+ENDIF (HAVE_GUILE)
+
+# ------------------------------------------------------------
 
 
 

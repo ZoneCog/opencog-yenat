@@ -44,10 +44,10 @@ void TulipWriter::writeNodes()
     // Output Node numbers/ids
     myfile << "(nodes ";
     for (Handle h : nodeHandles) {
-        myfile << h << " ";
+	    myfile << h.value() << " ";
     }
     for (Handle h : linkHandles) {
-        myfile << h << " ";
+	    myfile << h.value() << " ";
     }
     myfile << ")" << endl;
 
@@ -72,7 +72,7 @@ void TulipWriter::writeCluster(Handle setLink)
     a.get_handles_by_type(back_inserter(linkHandles), (Type) LINK, true );
 
     // Output setLink as a cluster
-    OrderedHandleSet inSet;
+    HandleSet inSet;
     if (setLink != Handle::UNDEFINED) {
         HandleSeq setLinks = setLink->getOutgoingSet();
         for (Handle h : setLinks) {
@@ -82,7 +82,7 @@ void TulipWriter::writeCluster(Handle setLink)
     myfile << "(cluster 1 \"In Set\"" << endl;
     myfile << " (nodes ";
     for (Handle h : inSet) {
-        myfile << h << " ";
+	    myfile << h.value() << " ";
     }
     myfile << ")\n)" << endl;
 
@@ -90,8 +90,8 @@ void TulipWriter::writeCluster(Handle setLink)
     myfile << "(cluster 2 \"Not in set\"" << endl;
     myfile << " (nodes ";
     for (Handle h : nodeHandles) {
-        OrderedHandleSet::iterator si = inSet.find(h);
-        if (si == inSet.end()) myfile << h << " ";
+        HandleSet::iterator si = inSet.find(h);
+        if (si == inSet.end()) myfile << h.value() << " ";
     }
     for (Handle h : linkHandles) {
         inSet.find(h);
@@ -101,7 +101,7 @@ void TulipWriter::writeCluster(Handle setLink)
     // TODO : also output the appropriate fake edges
 //    myfile << " (edges ";
 //    for (Handle h : linkHandles) {
-//        OrderedHandleSet::iterator si = inSet.find(h);
+//        HandleSet::iterator si = inSet.find(h);
 //        if (si == inSet.end()) {
 //            myfile << h << " ";
 //        }

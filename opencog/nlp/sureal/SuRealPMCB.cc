@@ -42,7 +42,7 @@ using namespace std;
  * @param pAS            the corresponding AtomSpace
  * @param vars           the set of nodes that should be treated as variables
  */
-SuRealPMCB::SuRealPMCB(AtomSpace* pAS, const OrderedHandleSet& vars, bool use_cache) :
+SuRealPMCB::SuRealPMCB(AtomSpace* pAS, const HandleSet& vars, bool use_cache) :
     InitiateSearchCB(pAS),
     DefaultPatternMatchCB(pAS),
     m_as(pAS),
@@ -509,7 +509,7 @@ bool SuRealPMCB::grounding(const std::map<Handle, Handle> &var_soln, const std::
         }
     }
 
-    OrderedHandleSet qSolnSetLinks;
+    HandleSet qSolnSetLinks;
 
     // get the R2L-SetLinks that are related to these InterpretationNodes
     for (Handle& hItprNode : qItprNode)
@@ -850,6 +850,10 @@ bool SuRealPMCB::initiate_search(PatternMatchEngine* pPME)
         bool found = neighbor_search(pPME);
         if (not _search_fail) return found;
     }
+
+    // Not sure quite what triggers this, but there are patterns
+    // with no mandatory clauses.
+    if (0 ==  _pattern->mandatory.size()) return false;
 
     // Reaching here means no constants, so do some search space
     // reduction here

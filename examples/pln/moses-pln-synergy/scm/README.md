@@ -129,7 +129,7 @@ configuration.
 $ guile
 scheme@(guile-user)> (load "moses-model.scm")
 scheme@(guile-user)> (load "background-knowledge.scm")
-scheme@(guile-user)> (load "pln-config.scm")
+scheme@(guile-user)> (load "pln-fc-config.scm")
 ```
 
 #### Apply rules
@@ -281,7 +281,7 @@ Semi-formally
 ```
 
 ```scheme
-scheme@(guile-user)> (cog-bind lambda-closed-construction-rule)
+scheme@(guile-user)> (cog-bind closed-lambda-introduction-rule)
 $5 = (SetLink
    (LambdaLink (stv 1 1)
       (TypedVariableLink
@@ -307,7 +307,7 @@ Semi-formally
 ```
 
 ```scheme
-scheme@(guile-user)> (cog-bind implication-construction-rule)
+scheme@(guile-user)> (cog-bind implication-introduction-rule)
 ...
    (ImplicationLink (stv 1 1)
       (LambdaLink

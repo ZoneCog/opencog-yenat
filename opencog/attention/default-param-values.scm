@@ -1,8 +1,10 @@
+
+(use-modules (opencog))
+
 (define AF_RENT_FREQUENCY  (ConceptNode "AF_RENT_FREQUENCY"))
 (define MAX_AF_SIZE (ConceptNode "MAX_AF_SIZE"))
+(define MIN_AF_SIZE (ConceptNode "MIN_AF_SIZE"))
 (define AF_SIZE (ConceptNode "AF_SIZE"))
-(define MAX_AF_SIZE (ConceptNode "MIN_AF_SIZE"))
-(define MIN_AF_SIZE (ConceptNode "MAX_AF_SIZE"))
 (define AFB_BOTTOM  (ConceptNode "AFB_BOTTOM"))
 (define AFB_DECAY (ConceptNode "AFB_DECAY"))
 (define ECAN_PARAM (ConceptNode "ECAN_PARAMS"))
@@ -115,10 +117,6 @@
   (NumberNode "0.2")  
 )
 (StateLink
-  MAX_AF_SIZE
-  (NumberNode "100")
-)
-(StateLink
   MIN_AF_SIZE
   (NumberNode "500")
 )
@@ -132,7 +130,7 @@
 )
 (StateLink 
   MAX_AF_SIZE
-  (NumberNode "500")
+  (NumberNode "1000")
 )
 (StateLink 
   AF_RENT_FREQUENCY 

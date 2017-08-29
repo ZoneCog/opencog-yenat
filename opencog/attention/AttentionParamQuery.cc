@@ -1,9 +1,10 @@
 
-#include "AttentionParamQuery.h"
-
 #include <opencog/atoms/base/Link.h>
-#include <opencog/util/Config.h>
 #include <opencog/guile/SchemeEval.h>
+#include <opencog/query/BindLinkAPI.h>
+#include <opencog/util/Config.h>
+
+#include "AttentionParamQuery.h"
 
 using namespace opencog;
 
@@ -19,7 +20,7 @@ const std::string AttentionParamQuery::af_rent_update_freq = "AF_RENT_FREQUENCY"
 const std::string AttentionParamQuery::forg_forgetting_threshold = "ECAN_FORGET_THRESHOLD";
 
 // Hebbian Link Params
-const std::string AttentionParamQuery::heb_maxlink = "MAXLINKS";
+const std::string AttentionParamQuery::heb_maxlink = "MAX_LINKS";
 const std::string AttentionParamQuery::heb_max_alloc_percentage = "HEBBIAN_MAX_ALLOCATION_PERCENTAGE";
 const std::string AttentionParamQuery::heb_local_farlink_ratio = "LOCAL_FAR_LINK_RATIO";
 

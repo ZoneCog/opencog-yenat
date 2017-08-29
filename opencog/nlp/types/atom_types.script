@@ -14,7 +14,6 @@
 // and are being replaced by newer RelEx forms.
 // Some of these may be revived. See below.
 //
-// PHRASE_NODE <- NODE
 // COLLOCATION_NODE <- WORD_NODE
 // SEQUENCE_LINK <- ORDERED_LINK
 //
@@ -25,7 +24,6 @@
 // TENSE_NODE <- FEATURE_NODE
 // NOUN_NUMBER_NODE <- FEATURE_NODE
 // WORD_GENDER_NODE <- FEATURE_NODE
-// FLAG_NODE <- NODE
 //
 // QUERY_VARIABLE_LINK <- ORDERED_LINK
 //
@@ -49,9 +47,12 @@ WORD_INSTANCE_NODE <- CONCEPT_NODE
 WORD_INSTANCE_LINK <- ASSOCIATIVE_LINK
 
 // These are needed for AIML conversion and dialog/speech handling.
-// Analogous to SENTNCE_NODE and DOCUMENT_NODE, but for speech.
+// Analogous to SENTENCE_NODE and DOCUMENT_NODE, but for speech.
 UTTERANCE_NODE <- CONCEPT_NODE
 DIALOG_NODE <- CONCEPT_NODE
+
+// Ghost (was chatlang) needs a PHRASE_NODE
+PHRASE_NODE <- NODE
 
 // These are used to number the sequence in which words,
 // sentences and documents are observed.  Use these with
@@ -74,11 +75,9 @@ FEATURE_LINK <- ORDERED_LINK
 // This is NOT a connector, its a pair of connected connectors.
 LINK_GRAMMAR_RELATIONSHIP_NODE <- PREDICATE_NODE   // e.g. "MX"
 
-// XXX TODO -- name should be shortened to LG_DISJUNCT_NODE
-LINK_GRAMMAR_DISJUNCT_NODE <- PREDICATE_NODE       // e.g. "S- O+ "
-
 // ---------------------------------------------------------------
 // Used to represent RelEx dependency relations
+// Since RelEx is deprecated, thes should eventually go away.
 DEFINED_LINGUISTIC_CONCEPT_NODE <- FEATURE_NODE
 DEFINED_LINGUISTIC_PREDICATE_NODE <- PREDICATE_NODE
 DEFINED_LINGUISTIC_RELATIONSHIP_NODE <- PREDICATE_NODE // e.g. _subj, _obj
@@ -106,6 +105,7 @@ COSENSE_LINK <- UNORDERED_LINK
 // ---------------------------------------------------------------
 // Concept-formation anchors.
 // See nlp/seme/README for details.
+// These are more-or-less obsolete, and should probably be removed.
 SEME_NODE <- CONCEPT_NODE
 SEMANTIC_RELATION_NODE <- SEME_NODE
 // CONTEXT_NODE <- CONCEPT_NODE // apparently useless
@@ -120,8 +120,19 @@ SPECIFIC_ENTITY_NODE <- NODE
 // Link Grammar dictionary types.
 // See
 // https://github.com/opencog/link-grammar/blob/master/viterbi/README
-// for details on what these mean.
+// for details on what these mean. These are currently used in the
+// sureal codebase.
 //
+// Dictionary. Holds a reference to an LG Dictionary.
+LG_DICT_NODE <- NODE
+
+// Looks up a single word in the LG dictionary
+LG_DICT_ENTRY <- FUNCTION_LINK
+
+// Parser - parses sentences.
+LG_PARSE_LINK <- FUNCTION_LINK
+LG_PARSE_MINIMAL <- LG_PARSE_LINK
+
 // Connector: same meaning and syntax as in link-grammar, except that
 // the direction and the multi-connector parts get distinct types.
 LG_CONNECTOR_NODE <- PREDICATE_NODE   // e.g. "MX"
@@ -160,20 +171,8 @@ LG_LINK_INSTANCE_NODE <- PREDICATE_NODE
 LG_LINK_INSTANCE_LINK <- LIST_LINK
 
 // ---------------------------------------------------------------
-// Language-learning atoms. The langauge-learning code uses MST
-// (minimum spanning tree) parsing in the initial stages; thus, these
-// have MST as part of thier name.
-//
-MST_CONNECTOR <- LINK "MSTConnector"  // analogous to LG_CONNECTOR
-DECODED_CONNECTOR <- LINK  // with words, in place of connector letters.
-
-// Analogous to LG_LINK_NODE and LG_DISJUNCT_NODE
-// The LINK_NODE is a pair of connected connectors (i.e. what is called
-// "the intersection" in the LG code-base/documentation)
-MST_LINK_NODE <- PREDICATE_NODE "MSTLinkNode"
-MST_DISJUNCT_NODE <- PREDICATE_NODE "MSTDisjunctNode"
-
-//New Types used in the Lojban Parser
-//Might have to be moved at some point
+// Types used in the Lojban Parser
+// What do thse types do? XXX FIXME - these names are excessively
+// generic, and quite mysterious.
 SET_TYPE_LINK <- ORDERED_LINK
 SET_SIZE_LINK <- ORDERED_LINK

@@ -29,12 +29,12 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <fstream>
 
 #include <opencog/atoms/base/Link.h>
 #include <opencog/atoms/base/Node.h>
 #include <opencog/atomspace/AtomSpace.h>
 
-#include "Pattern.h"
 #include "HTree.h"
 
 using namespace std;
@@ -45,16 +45,25 @@ namespace opencog
 namespace PatternMining
 {
 #define FLOAT_MIN_DIFF 0.00001
+#define FREQUENCY_TOP_THRESHOLD 0.02
+#define FREQUENCY_BOTTOM_THRESHOLD 0.95
 #define SURPRISINGNESS_I_TOP_THRESHOLD 0.20
 #define SURPRISINGNESS_II_TOP_THRESHOLD 0.40
-
+#define OUTPUT_SURPRISINGNESS_CALCULATION_TO_FILE 1
+#define GENERATE_TMP_PATTERNS 0
+#define USE_QUERY_ENTITY_COUNT_FOR_EACH_PREDICATE 0
+#define USE_QUERY_ALL_ENTITY_COUNT 0
+#define USE_ABS_SURPRISINGNESS 1
 #define LINE_INDENTATION "  "
+#define CALCULATE_TYPE_B_SURPRISINGNESS 1
+#define GENERATE_TYPE_B_RELATION_WHEN_CALCULATE_SURPRISINGNESS 0
 
+#define PATTERN_VARIABLENODE_TYPE PATTERN_VARIABLE_NODE
 
 struct _non_ordered_pattern
 {
     Handle link;
-    vector< vector<int> > indexesOfSharedVars;
+    vector< vector <std::pair<int,std::size_t> > > indexesOfSharedVars;
 
     bool operator <(const _non_ordered_pattern& other) const
     {
@@ -67,12 +76,56 @@ struct _non_ordered_pattern
 
             for (unsigned int j = 0; j < indexesOfSharedVars[i].size(); ++ j)
             {
-                if (indexesOfSharedVars[i][j]< other.indexesOfSharedVars[i][j])
+                if ((indexesOfSharedVars[i][j]).first< (other.indexesOfSharedVars[i][j]).first)
                     return true;
-                else if (indexesOfSharedVars[i][j] > other.indexesOfSharedVars[i][j])
+                else if ((indexesOfSharedVars[i][j]).first > (other.indexesOfSharedVars[i][j]).first)
+                    return false;
+
+                if ((indexesOfSharedVars[i][j]).second < (other.indexesOfSharedVars[i][j]).second)
+                    return true;
+                else if ((indexesOfSharedVars[i][j]).second > (other.indexesOfSharedVars[i][j]).second)
                     return false;
             }
         }
+
+        // if all above criteria cannot figure out the order of these two patterns, just return true and output a warning
+        cout << "\n warning: _non_ordered_pattern: Fail to figure out the order of  two patterns!\n";
+        return true;
+    }
+};
+
+
+struct advanced_non_ordered_pattern // only when complex patterns like pln patterns, used when enable_unify_unordered_links = true
+{
+    Handle link;
+    vector< vector <std::pair<int,std::size_t> > > indexesOfSharedVars; // the shared vars indexes appear in the already sorted links
+
+
+    bool operator <(const _non_ordered_pattern& other) const
+    {
+        // first, use indexesOfSharedVars
+        for (unsigned int i = 0; i < indexesOfSharedVars.size(); ++ i)
+        {
+            if (indexesOfSharedVars[i].size() < other.indexesOfSharedVars[i].size())
+                return true;
+            else if (indexesOfSharedVars[i].size() > other.indexesOfSharedVars[i].size())
+                return false;
+
+            for (unsigned int j = 0; j < indexesOfSharedVars[i].size(); ++ j)
+            {
+                if ((indexesOfSharedVars[i][j]).first< (other.indexesOfSharedVars[i][j]).first)
+                    return true;
+                else if ((indexesOfSharedVars[i][j]).first > (other.indexesOfSharedVars[i][j]).first)
+                    return false;
+
+                if ((indexesOfSharedVars[i][j]).second < (other.indexesOfSharedVars[i][j]).second)
+                    return true;
+                else if ((indexesOfSharedVars[i][j]).second > (other.indexesOfSharedVars[i][j]).second)
+                    return false;
+            }
+        }
+
+        // if indexesOfSharedVars cannot decide the result, use
 
         // if all above criteria cannot figure out the order of these two patterns, just return true and output a warning
         cout << "\n warning: _non_ordered_pattern: Fail to figure out the order of  two patterns!\n";
@@ -94,6 +147,13 @@ struct MinedPatternInfo
     string curPatternKeyStr;
     string parentKeyString;
     unsigned int extendedLinkIndex;
+    bool notOutPutPattern;
+};
+
+enum QUERY_LOGIC
+{
+    OR,
+    AND
 };
 
 class PatternMiner
@@ -113,6 +173,11 @@ protected:
     vector < vector<HTreeNode*> > patternsForGram;
     vector < vector<HTreeNode*> > finalPatternsForGram;
 
+    // temp patterns generated only for calcuate the interestingness of its superpatterns, e.g. patterns with too many variables
+    vector < vector<HTreeNode*> > tmpPatternsForGram;
+
+    map<string, unsigned int> allEntityNumMap;
+
     std::thread *threads;
 
     unsigned int THREAD_NUM;
@@ -125,6 +190,8 @@ protected:
 
     unsigned int cur_gram;
 
+    double max_var_num_percent;
+
     int cur_index;
 
     int allLinkNumber;
@@ -135,27 +202,64 @@ protected:
 
     bool enable_filter_leaves_should_not_be_vars;
     bool enable_filter_links_should_connect_by_vars;
-    bool enable_filter_not_inheritant_from_same_var;
+    bool enable_filter_links_of_same_type_not_share_second_outgoing;
     bool enable_filter_not_same_var_from_same_predicate;
     bool enable_filter_not_all_first_outgoing_const;
     bool enable_filter_first_outgoing_evallink_should_be_var;
     bool enable_filter_node_types_should_not_be_vars;
     vector<Type> node_types_should_not_be_vars;
 
-    unsigned int num_of_patterns_without_superpattern_cur_gram;
+    bool enable_filter_node_types_should_be_vars;
+    vector<Type> node_types_should_be_vars;
 
-    unsigned int thresholdFrequency; // patterns with a frequency lower than thresholdFrequency will be neglected, not grow next gram pattern from them
+    vector<Type> same_link_types_not_share_second_outgoing;
+
+    unsigned int num_of_patterns_without_superpattern_cur_gram;
+    unsigned int *num_of_patterns_with_1_frequency;
+
+    unsigned int thresholdFrequency;
 
     std::mutex uniqueKeyLock, patternForLastGramLock, removeAtomLock, patternMatcherLock, addNewPatternLock, calculateIILock,
-        readNextLinkLock,actualProcessedLinkLock, curDFExtractedLinksLock, readNextPatternLock;
+        readNextLinkLock,actualProcessedLinkLock, curDFExtractedLinksLock, readNextPatternLock, threadExtractedLinksLock;
 
-    Type ignoredTypes[1];
+    bool use_keyword_white_list;
+    bool use_keyword_black_list;
 
-    bool enable_Frequent_Pattern;
+    // = true will filter out atoms with labels contain keyword, = fasle will only filter out atoms with labels equal to any keyword
+    bool keyword_black_logic_is_contain;
+    HandleSet black_keyword_Handles; // only use when keyword_black_logic_is_contain = false
+
+    QUERY_LOGIC keyword_white_list_logic;
+
+    bool use_linktype_black_list;
+    bool use_linktype_white_list;
+
+    vector<Type> linktype_black_list;
+    vector<Type> linktype_white_list;
+
+//    Handle FrequencyHandle;
+//    Handle InteractionInformationHandle;
+//    Handle SurprisingnessIHandle;
+//    Handle SurprisingnessIIHandle;
+    Handle PatternValuesHandle;
+
+    bool if_quote_output_pattern;
+    Type output_pattern_quoted_linktype;
+
+    bool calculate_type_b_surprisingness;
+
     bool enable_Interesting_Pattern;
 
-    // Only effective when Enable_Interesting_Pattern is true. The options are "Interaction_Information", "surprisingness"
-    string interestingness_Evaluation_method;
+    // Only effective when Enable_Interesting_Pattern is true.
+    bool Enable_Interaction_Information;
+    bool Enable_surprisingness;
+
+    bool enable_unify_unordered_links; // if the corpus contains unordered Links like AND_LINK
+
+    bool only_mine_patterns_start_from_white_list;
+    bool only_mine_patterns_start_from_white_list_contain;
+
+    bool only_output_patterns_contains_white_keywords;
 
     float atomspaceSizeFloat;
 
@@ -167,11 +271,19 @@ protected:
 
     vector<vector<vector<unsigned int>>> components_ngram[3];
 
-
+    HandleSeq allLinksContainWhiteKeywords;
+    HandleSet havenotProcessedWhiteKeywordLinks;
 
    // [gram], this to avoid different threads happen to work on the same links.
    // each string is composed the handles of a group of fact links in the observingAtomSpace in the default hash order using std set
-   set<string>* cur_DF_ExtractedLinks;
+    // queue<string>[thread_num][max_gram]
+   list<string>** thread_DF_ExtractedLinks;
+   // set<string>[max_gram]
+   set<string>* all_thread_ExtractedLinks_pergram;
+
+   HandleSeq allDBpediaKeyNodes;
+
+   std::ofstream surpringnessIICalfile;
 
     // this is to against graph isomorphism problem, make sure the patterns we found are not dupicacted
     // the input links should be a Pattern in such format:
@@ -195,35 +307,49 @@ protected:
     //       )
     //    )
     // Return unified ordered Handle vector
-    HandleSeq UnifyPatternOrder(HandleSeq& inputPattern, unsigned int &unifiedLastLinkIndex);
+    HandleSeq _UnifyPatternOrder(HandleSeq& inputPattern, unsigned int& unifiedLastLinkIndex);
 
-    string unifiedPatternToKeyString(HandleSeq& inputPattern , const AtomSpace *atomspace = 0);
+    HandleSeq UnifyPatternOrder(HandleSeq& inputPattern, unsigned int &unifiedLastLinkIndex, map<Handle,Handle>& orderedVarNameMap);
+
+    Handle UnifyOneLinkForUnorderedLink(Handle& link,std::map<Handle,Type> &orderedTmpLinkToType);
+
+
+    Handle rebindLinkTypeRecursively(Handle &inputLink, std::map<Handle,Type> &orderedTmpLinkToType);
+
+    void addAtomTypesFromString(string node_types_str, vector<Type> &typeListToAddTo);
 
     // this function is called by RebindVariableNames
-    void findAndRenameVariablesForOneLink(Handle link, map<Handle,Handle>& varNameMap, HandleSeq& renameOutgoingLinks);
+    void findAndRenameVariablesForOneLink(Handle link, map<Handle,Handle>& varNameMap, HandleSeq& renameOutgoingLinks, std::map<Handle,Type> &orderedTmpLinkToType);
 
     // rename the variable names in a ordered pattern according to the orders of the variables appear in the orderedPattern
-    HandleSeq RebindVariableNames(HandleSeq& orderedPattern, map<Handle,Handle>& orderedVarNameMap);
+    HandleSeq RebindVariableNames(HandleSeq& orderedPattern, map<Handle,Handle>& orderedVarNameMap,std::map<Handle,Type> &orderedTmpLinkToType);
 
-    void generateIndexesOfSharedVars(Handle& link, HandleSeq& orderedHandles, vector< vector<int> > &indexes);
+    void ReplaceConstNodeWithVariableForOneLink(Handle link, Handle constNode, Handle newVariableNode, HandleSeq& renameOutgoingLinks);
+
+    HandleSeq ReplaceConstNodeWithVariableForAPattern(HandleSeq& pattern, Handle constNode, Handle newVariableNode);
+
+    void generateIndexesOfSharedVars(Handle& link, HandleSeq& orderedHandles, vector<vector<std::pair<int, size_t> > > &indexes);
 
     // generate the outgoings for a link in a pattern in the Pattern mining Atomspace, according to the given group of variables
     void generateALinkByChosenVariables(Handle &originalLink, map<Handle,Handle>& valueToVarMap, HandleSeq &outputOutgoings, AtomSpace *_fromAtomSpace);
 
     // valueToVarMap:  the ground value node in the orginal Atomspace to the variable handle in pattenmining Atomspace
     void extractAllNodesInLink(Handle link, map<Handle,Handle>& valueToVarMap, AtomSpace* _fromAtomSpace);
-    void extractAllNodesInLink(Handle link, OrderedHandleSet& allNodes, AtomSpace* _fromAtomSpace);
+    void extractAllNodesInLink(Handle link, HandleSet& allNodes, AtomSpace* _fromAtomSpace);
     void extractAllNodesInLink(Handle link, map<Handle, unsigned int> &allNodes, AtomSpace* _fromAtomSpace, unsigned index); // just find all the nodes in the original atomspace for this link
-    void extractAllVariableNodesInLink(Handle link, OrderedHandleSet& allNodes, AtomSpace* _atomSpace);
+    void extractAllVariableNodesInLink(Handle link, HandleSet& allNodes, AtomSpace* _atomSpace);
+    void extractAllConstNodesInALink(Handle link, HandleSet& allConstNodes, AtomSpace* _atomSpace);
 
     // if a link contains only variableNodes , no const nodes
     bool onlyContainVariableNodes(Handle link, AtomSpace* _atomSpace);
 
-    void extractAllPossiblePatternsFromInputLinksBF(HandleSeq& inputLinks,  HTreeNode* parentNode,OrderedHandleSet& sharedNodes, unsigned int gram);
+    bool containVariableNodes(Handle link, AtomSpace* _atomSpace);
 
-    // vector<HTreeNode *> &allHTreeNodes is output all the HTreeNodes found
-    void extractAllPossiblePatternsFromInputLinksDF(HandleSeq& inputLinks,unsigned int sharedLinkIndex, AtomSpace* _fromAtomSpace,
-                                                    vector<HTreeNode*>& allLastGramHTreeNodes, vector<HTreeNode*>& allHTreeNodes, unsigned int gram = 1);
+    void extractAllPossiblePatternsFromInputLinksBF(HandleSeq& inputLinks,  HTreeNode* parentNode,HandleSet& sharedNodes, unsigned int gram);
+
+//    // vector<HTreeNode *> &allHTreeNodes is output all the HTreeNodes found
+//    void extractAllPossiblePatternsFromInputLinksDF(HandleSeq& inputLinks,unsigned int sharedLinkIndex, AtomSpace* _fromAtomSpace,
+//                                                    vector<HTreeNode*>& allLastGramHTreeNodes, vector<HTreeNode*>& allHTreeNodes, unsigned int gram = 1);
 
     void swapOneLinkBetweenTwoAtomSpace(AtomSpace* fromAtomSpace, AtomSpace* toAtomSpace, Handle& fromLink, HandleSeq& outgoings, HandleSeq &outVariableNodes);
 
@@ -232,30 +358,42 @@ protected:
     HandleSeq swapLinksBetweenTwoAtomSpace(AtomSpace* fromAtomSpace, AtomSpace* toAtomSpace, HandleSeq& fromLinks, HandleSeq &outVariableNodes);
 
 
-    void swapOneLinkBetweenTwoAtomSpaceBF(AtomSpace* fromAtomSpace, AtomSpace* toAtomSpace, Handle& fromLink, HandleSeq& outgoings,
+    void swapOneLinkBetweenTwoAtomSpaceForBindLink(AtomSpace* fromAtomSpace, AtomSpace* toAtomSpace, Handle& fromLink, HandleSeq& outgoings,
                                           HandleSeq &outVariableNodes, HandleSeq& linksWillBeDel, bool& containVar );
 
-    HandleSeq swapLinksBetweenTwoAtomSpaceBF(AtomSpace* fromAtomSpace, AtomSpace* toAtomSpace, HandleSeq& fromLinks, HandleSeq& outVariableNodes, HandleSeq& linksWillBeDel);
+    HandleSeq swapLinksBetweenTwoAtomSpaceForBindLink(AtomSpace* fromAtomSpace, AtomSpace* toAtomSpace, HandleSeq& fromLinks, HandleSeq& outVariableNodes, HandleSeq& linksWillBeDel);
 
-    void extractAllVariableNodesInAnInstanceLink(Handle& instanceLink, Handle& patternLink, OrderedHandleSet& allVarNodes);
+    void extractAllVariableNodesInAnInstanceLink(Handle& instanceLink, Handle& patternLink, HandleSet& allVarNodes);
 
     void extractAllVariableNodesInAnInstanceLink(Handle& instanceLink, Handle& patternLink, map<Handle, unsigned int>& allVarNodes, unsigned index);
 
     void extendAllPossiblePatternsForOneMoreGramDF(HandleSeq &instance, AtomSpace* _fromAtomSpace, unsigned int gram,
-                                                   vector<HTreeNode*>& allLastGramHTreeNodes, map<HandleSeq, vector<HTreeNode*> >& allFactLinksToPatterns, vector<OrderedHandleSet>& newConnectedLinksFoundThisGram);
+                                                   vector<HTreeNode*>& allLastGramHTreeNodes, map<HandleSeq, vector<HTreeNode*> >& allFactLinksToPatterns, vector<HandleSet>& newConnectedLinksFoundThisGram);
 
     void extendAllPossiblePatternsForOneMoreGramBF(HandleSeq &instance, HTreeNode* curHTreeNode, unsigned int gram);
 
     //  void extendAllPossiblePatternsTillMaxGramDF(Handle &startLink, AtomSpace* _fromAtomSpace, unsigned int max_gram);
+    void addThreadExtractedLinks(unsigned int _gram, unsigned int cur_thread_index, string _extractedLinkUIDs);
+
+    bool existInAllThreadExtractedLinks(unsigned int _gram, string _extractedLinkUIDs);
+
+    bool existInOneThreadExtractedLinks(unsigned int _gram, unsigned int cur_thread_index, string _extractedLinkUIDs);
 
     void extendAPatternForOneMoreGramRecursively(const Handle &extendedLink, AtomSpace* _fromAtomSpace, const Handle &extendedNode, const HandleSeq &lastGramLinks,
                                                  HTreeNode* parentNode, const map<Handle,Handle> &lastGramValueToVarMap, const map<Handle,Handle> &lastGramPatternVarMap,
-                                                 bool isExtendedFromVar, vector<HTreeNode*> &allHTreeNodesCurTask, vector<MinedPatternInfo> &allNewMinedPatternInfo);
+                                                 bool isExtendedFromVar, set<string>& allNewMinedPatternsCurTask, vector<HTreeNode*> &allHTreeNodesCurTask,
+                                                 vector<MinedPatternInfo> &allNewMinedPatternInfo, unsigned int thread_index, bool startFromLinkContainWhiteKeyword);
 
     bool containsLoopVariable(HandleSeq& inputPattern);
 
-    HTreeNode* extractAPatternFromGivenVarCombination(HandleSeq &inputLinks, map<Handle,Handle> &patternVarMap, HandleSeqSeq &oneOfEachSeqShouldBeVars, HandleSeq &leaves,
-                                                      HandleSeq &shouldNotBeVars, HandleSeq &shouldBeVars, AtomSpace *_fromAtomSpace, unsigned int &extendedLinkIndex);
+    void quoteAPattern(HTreeNode* hTreeNode);
+
+    void quoteAllThePatternSForGram(unsigned int gram);
+
+    HTreeNode* extractAPatternFromGivenVarCombination(HandleSeq &inputLinks, map<Handle,Handle> &patternVarMap, map<Handle,Handle>& orderedVarNameMap,HandleSeqSeq &oneOfEachSeqShouldBeVars, HandleSeq &leaves,HandleSeq &shouldNotBeVars, HandleSeq &shouldBeVars,
+                                                      AtomSpace *_fromAtomSpace, unsigned int &extendedLinkIndex, set<string>& allNewMinedPatternsCurTask, bool &notOutPutPattern, bool &patternAlreadyExtractedInCurTask,bool startFromLinkContainWhiteKeyword);
+
+
 
     void findAllInstancesForGivenPatternInNestedAtomSpace(HTreeNode* HNode);
 
@@ -269,7 +407,7 @@ protected:
 
     void GrowAllPatternsBF();
 
-    void growPatternsDepthFirstTask_old();
+    // void growPatternsDepthFirstTask_old();
 
     void growPatternsDepthFirstTask(unsigned int thread_index);
 
@@ -289,23 +427,30 @@ protected:
 
     bool isIgnoredType(Type type);
 
+    bool isTypeInList(Type type, vector<Type> &typeList);
+
     // if atomspace = 0, it will use the pattern mining Atomspace
     std::string Link2keyString(Handle& link, string indent = "", const AtomSpace *atomspace = 0);
 
     void removeLinkAndItsAllSubLinks(AtomSpace *_atomspace, Handle link);
 
-    OrderedHandleSet _getAllNonIgnoredLinksForGivenNode(Handle keywordNode, OrderedHandleSet& allSubsetLinks);
+    HandleSet _getAllNonIgnoredLinksForGivenNode(Handle keywordNode, HandleSet& allSubsetLinks);
 
-    OrderedHandleSet _extendOneLinkForSubsetCorpus(OrderedHandleSet& allNewLinksLastGram, OrderedHandleSet& allSubsetLinks);
+    HandleSet _extendOneLinkForSubsetCorpus(HandleSet& allNewLinksLastGram, HandleSet& allSubsetLinks, HandleSet& extractedNodes);
 
     // will write the subset to a scm file
-    void _selectSubsetFromCorpus(vector<string>& subsetKeywords, unsigned int max_connection);
+    void _selectSubsetFromCorpus(vector<string>& subsetKeywords, unsigned int max_connection, bool logic_contain = true);
+
+    void findAllLinksContainKeyWords(vector<string>& subsetKeywords, unsigned int max_connection, bool logic_contain, HandleSet& foundLinks);
 
     bool isIgnoredContent(string keyword);
 
     bool containIgnoredContent(Handle link );
 
-    const static string ignoreKeyWords[];
+    bool doesLinkContainNodesInKeyWordNodes(const Handle& link, const HandleSet& keywordNodes);
+
+    vector<string> keyword_black_list;
+    vector<string> keyword_white_list;
 
     bool splitDisconnectedLinksIntoConnectedGroups(HandleSeq& inputLinks, HandleSeqSeq& outputConnectedGroups);
 
@@ -317,7 +462,11 @@ protected:
 
     unsigned int getCountOfAConnectedPattern(string& connectedPatternKey, HandleSeq& connectedPattern);
 
+    unsigned int getAllEntityCountWithSamePredicatesForAPattern(HandleSeq& pattern);
+
     void calculateSurprisingness( HTreeNode* HNode, AtomSpace *_fromAtomSpace);
+
+    void calculateTypeBSurprisingness( HTreeNode* HNode, AtomSpace *_fromAtomSpace);
 
     void getOneMoreGramExtendedLinksFromGivenLeaf(Handle& toBeExtendedLink, Handle& leaf, Handle& varNode,
                                                   HandleSeq& outPutExtendedPatternLinks, AtomSpace* _fromAtomSpace);
@@ -329,7 +478,20 @@ protected:
 
     bool filters(HandleSeq& inputLinks, HandleSeqSeq& oneOfEachSeqShouldBeVars, HandleSeq& leaves, HandleSeq& shouldNotBeVars, HandleSeq& shouldBeVars,AtomSpace* _atomSpace);
 
+    bool containWhiteKeywords(const string& str, QUERY_LOGIC logic);
 
+    bool containKeywords(const string& str, vector<string>& keywords, QUERY_LOGIC logic);
+
+    void reSetAllSettingsFromConfig();
+
+    void initPatternMiner();
+
+    void cleanUpPatternMiner();
+
+    bool loadOutgoingsIntoAtomSpaceFromString(stringstream &outgoingStream, AtomSpace *_atomSpace, HandleSeq &outgoings, string parentIndent = "");
+    bool loadOutgoingsIntoAtomSpaceFromAtomString(stringstream& outgoingStream, AtomSpace *_atomSpace, HandleSeq &outgoings, string parentIndent = "");
+    HandleSeq loadPatternIntoAtomSpaceFromString(string patternStr, AtomSpace* _atomSpace);// input string is pattern keystring
+    HandleSeq loadPatternIntoAtomSpaceFromFileString(string patternStr, AtomSpace *_atomSpace); // input string is normal atom string
 
 
 public:
@@ -338,31 +500,138 @@ public:
 
     bool checkPatternExist(const string& patternKeyStr);
 
-    void OutPutFrequentPatternsToFile(unsigned int n_gram);
+    string unifiedPatternToKeyString(HandleSeq& inputPattern , const AtomSpace *atomspace = 0);
+
+    void OutPutFrequentPatternsToFile(unsigned int n_gram, vector < vector<HTreeNode*> >& _patternsForGram, string _fileNamebasic = "");
 
     void OutPutStaticsToCsvFile(unsigned int n_gram);
 
-    void OutPutLowFrequencyHighSurprisingnessPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram);
+    void OutPutLowFrequencyHighSurprisingnessPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram, unsigned int max_frequency_index);
 
-    void OutPutHighFrequencyHighSurprisingnessPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram, unsigned int min_frequency);
+    void OutPutHighFrequencyHighSurprisingnessPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram, unsigned int min_frequency_index);
 
     void OutPutHighSurprisingILowSurprisingnessIIPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram, float min_surprisingness_I, float max_surprisingness_II);
 
-    void OutPutInterestingPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram, int surprisingness = 0);
+    void OutPutInterestingPatternsToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram, int surprisingness, string _fileNamebasic = "");
+
+    void OutPutSurpringnessBToFile(vector<HTreeNode*> &patternsForThisGram, unsigned int n_gram);
 
     void OutPutFinalPatternsToFile(unsigned int n_gram);
 
-    void runPatternMiner(unsigned int _thresholdFrequency = 2);
+    void OutPutAllEntityNumsToFile();
+
+    void queryPatternsWithFrequencySurprisingnessIRanges(unsigned int min_frequency, unsigned int max_frequency, float min_surprisingness_I, float max_surprisingness_I, int gram);
+
+    void queryPatternsWithSurprisingnessIAndIIRanges(unsigned int min_frequency, unsigned int max_frequency,
+                                                                   float min_surprisingness_I, float max_surprisingness_I,
+                                                                   float min_surprisingness_II, float max_surprisingness_II,int gram);
+
+    void queryPatternsWithFrequencySurprisingnessBRanges(unsigned int min_frequency, unsigned int max_frequency,
+                                                                   float min_surprisingness_B, float max_surprisingness_B,
+                                                                   unsigned int min_subpattern_num, unsigned int max_subpattern_num,int gram);
+
+    void queryPatternsWithFrequencyAndInteractionInformationRanges(unsigned int min_frequency, unsigned int max_frequency,
+                                                                   float min_ii, float max_ii, int gram);
+
+    AtomSpace* getResultAtomSpace() {return atomSpace;}
+
+    void runPatternMiner(bool exit_program_after_finish = true);
 
     void runPatternMinerBreadthFirst();
 
     void runPatternMinerDepthFirst();
 
-    void selectSubsetFromCorpus(vector<string> &topics, unsigned int gram = 2);
+    void runInterestingnessEvaluation();
 
-    void testPatternMatcher1();
-    void testPatternMatcher2();
+    void selectSubsetFromCorpus(vector<string> &topics, unsigned int gram, bool if_contian_logic = true);
 
+    void selectSubsetAllEntityLinksContainsKeywords(vector<string>& subsetKeywords);
+
+    void loandAllDBpediaKeyNodes();
+
+    void selectSubsetForDBpedia();
+
+    vector<HTreeNode*>&  getFinalPatternsForGram(unsigned int gram){return finalPatternsForGram[gram - 1];}
+
+    void loadPatternsFromResultFile(string fileName);
+
+    void testPatternMatcher();
+
+
+public:
+    // -------------------------------basic settings----------------------
+
+    unsigned int get_Pattern_Max_Gram(){return MAX_GRAM;}
+    void set_Pattern_Max_Gram(unsigned int _max_gram){ MAX_GRAM = _max_gram;}
+
+    bool get_Enable_Interesting_Pattern(){return enable_Interesting_Pattern;}
+    void set_Enable_Interesting_Pattern(bool _enable){enable_Interesting_Pattern = _enable;}
+
+    unsigned int get_Frequency_threshold() {return thresholdFrequency;}
+    void set_Frequency_threshold(unsigned int _Frequency_threshold) {thresholdFrequency = _Frequency_threshold;}
+
+    // -------------------------------end basic settings----------------------
+
+    // -------------------------------filter settings----------------------
+    bool get_use_keyword_black_list(){return use_keyword_black_list;}
+    void set_use_keyword_black_list(bool _use){use_keyword_black_list = _use;}
+
+    bool get_use_keyword_white_list(){return use_keyword_white_list;}
+    void set_use_keyword_white_list(bool _use){use_keyword_white_list = _use;}
+
+    bool get_use_linktype_black_list(){return use_linktype_black_list;}
+    void set_use_linktype_black_list(bool _use){use_linktype_black_list = _use;}
+
+    bool get_use_linktype_white_list(){return use_linktype_white_list;}
+    void set_use_linktype_white_list(bool _use){use_linktype_white_list = _use;}
+
+    vector<Type> get_linktype_white_list(){return linktype_white_list;}
+    bool add_linktype_to_white_list(Type _type);
+    bool remove_linktype_from_white_list(Type _type);
+
+    vector<Type> get_Ignore_Link_Types(){return linktype_black_list;}
+    bool add_Ignore_Link_Type(Type _type);
+    bool remove_Ignore_Link_Type(Type _type);
+
+    vector<string> get_keyword_black_list(){return keyword_black_list;}
+    bool add_keyword_to_black_list(string _keyword);
+    bool remove_keyword_from_black_list(string _keyword);
+    void clear_keyword_black_list(){keyword_black_list.clear();}
+
+    vector<string> get_keyword_white_list(){return keyword_white_list;}
+    bool add_keyword_to_white_list(string _keyword);
+    bool remove_keyword_from_white_list(string _keyword);
+    void clear_keyword_white_list(){keyword_white_list.clear();}
+
+    QUERY_LOGIC get_keyword_white_list_logic(){return keyword_white_list_logic;}
+    void set_keyword_white_list_logic(QUERY_LOGIC logic){keyword_white_list_logic = logic;}
+
+    void set_enable_filter_links_of_same_type_not_share_second_outgoing(bool _enable){enable_filter_links_of_same_type_not_share_second_outgoing = _enable;}
+    bool get_enable_filter_links_of_same_type_not_share_second_outgoing(){return enable_filter_links_of_same_type_not_share_second_outgoing;}
+    vector<Type> get_same_link_types_not_share_second_outgoing(){return same_link_types_not_share_second_outgoing;}
+    bool add_link_type_to_same_link_types_not_share_second_outgoing(Type _type);
+    bool remove_link_type_from_same_link_types_not_share_second_outgoing(Type _type);
+    void clear_same_link_types_not_share_second_outgoing(){same_link_types_not_share_second_outgoing.clear();}
+
+    void set_enable_filter_node_types_should_not_be_vars(bool _enable){enable_filter_node_types_should_not_be_vars = _enable;}
+    bool get_enable_filter_node_types_should_not_be_vars(){return enable_filter_node_types_should_not_be_vars;}
+    vector<Type> get_node_types_should_not_be_vars(){return node_types_should_not_be_vars;}
+    bool add_node_type_to_node_types_should_not_be_vars(Type _type);
+    bool remove_node_type_from_node_types_should_not_be_vars(Type _type);
+    void clear_node_types_should_not_be_vars(){node_types_should_not_be_vars.clear();}
+
+    void set_enable_filter_node_types_should_be_vars(bool _enable){enable_filter_node_types_should_be_vars = _enable;}
+    bool get_enable_filter_node_types_should_be_vars(){return enable_filter_node_types_should_be_vars;}
+    vector<Type> get_node_types_should_be_vars(){return node_types_should_be_vars;}
+    bool add_node_type_to_node_types_should_be_vars(Type _type);
+    bool remove_node_type_from_node_types_should_be_vars(Type _type);
+    void clear_node_types_should_be_vars(){node_types_should_be_vars.clear();}
+
+    // -------------------------------end filter settings----------------------
+
+    void applyWhiteListKeywordfilterAfterMining();
+
+    void resetPatternMiner(bool resetAllSettingsFromConfig);
 
 };
 

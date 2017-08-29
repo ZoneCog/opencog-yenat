@@ -267,9 +267,9 @@ ELSE (LAPACK_FOUND)
 ENDIF (LAPACK_FOUND)
 
 
-# Link-Gramar is needed for the Viterbi parser and more generally NLP
-# Only 4.7.12 or newer has the required read-dict API in it.
-FIND_PACKAGE(LinkGrammar 4.7.12)
+# Link-Gramar is needed for several NLP subsystems
+# Only 5.4.0 or newer has the required API in it.
+FIND_PACKAGE(LinkGrammar 5.4.0)
 IF (LINK_GRAMMAR_FOUND)
 	SET(HAVE_LINK_GRAMMAR 1)
 	INCLUDE_DIRECTORIES(${LINK_GRAMMAR_INCLUDE_DIRS})
@@ -297,7 +297,7 @@ IF(OCTOMAP_FOUND AND OCTOMAP_LIBRARY)
   INCLUDE_DIRECTORIES(${OCTOMAP_INCLUDE_DIR})
   SET(OCTOMAP_DIR_MESSAGE "Octomap was found.")
 ELSE (OCTOMAP_FOUND AND OCTOMAP_LIBRARY)
-  SET(OCTOMAP_DIR_MESSAGE "Octomap not found.")
+  SET(OCTOMAP_DIR_MESSAGE "Octomap missing: needed for the SpaceTime map.")
 ENDIF(OCTOMAP_FOUND AND OCTOMAP_LIBRARY)
 
 
@@ -307,7 +307,7 @@ FIND_PACKAGE(OpenGL)
 IF (OPENGL_FOUND)
 	MESSAGE(STATUS "OpenGL was found.")
 ELSE (OPENGL_FOUND)
-	MESSAGE(STATUS "OpenGL missing: needed for Spatial tools (MapExplorer, MapTools, etc.).")
+	MESSAGE(STATUS "OpenGL missing: needed for space visualization tools (MapExplorer, MapTools, etc.).")
 ENDIF (OPENGL_FOUND)
 
 # Google Protobuf library

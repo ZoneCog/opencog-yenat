@@ -19,11 +19,27 @@
 (load "utilities.scm")
 
 ; --------------------------------------------------------------
+; Configure openpsi logger
+(define opl (cog-new-logger))
+(cog-logger-set-component! opl "OpenPsi")
+(cog-logger-set-level! opl "debug")
+(cog-logger-set-stdout! opl #f)
+
+(define-public (psi-get-logger)
+"
+  psi-get-logger
+
+  Returns the looger for openpsi.
+"
+  opl
+)
+
+; --------------------------------------------------------------
 ; Variable for controlling whether to keep on running the loop or not.
 (define psi-do-run-loop #f)
 
 ; --------------------------------------------------------------
-(define-public (psi-running?)
+(define (psi-running?)
 "
   psi-running?
 
@@ -35,7 +51,7 @@
 ; --------------------------------------------------------------
 (define psi-loop-count 0)
 
-(define-public (psi-get-loop-count)
+(define (psi-get-loop-count)
 "
   psi-get-loop-count
 
@@ -45,7 +61,7 @@
 )
 
 ; --------------------------------------------------------------
-(define-public (psi-run-continue?)  ; public only because its in a GPN
+(define (psi-run-continue?)  ; public only because its in a GPN
 "
   psi-run-continue?
 
@@ -60,7 +76,7 @@
 )
 
 ; ----------------------------------------------------------------------
-(define-public (psi-step)
+(define (psi-step)
 "
   psi-step - Take one step of the OpenPsi rule engine.
 
@@ -75,7 +91,7 @@
         (let* ((pattern (GetLink (AndLink (psi-get-context rule))))
                 ;FIXME: Cache `results` during `psi-select-rules` stage
                (results (cog-execute! pattern)))
-            (cog-delete pattern)
+            (cog-extract pattern)
             ; If it is only links then nothing to pass to an action.
             (if (null? (cog-get-all-nodes results))
                 '()
@@ -90,8 +106,7 @@
                (goals (psi-related-goals action))
                (context-atoms (get-context-grounding-atoms rule)))
 
-            (cog-logger-debug "[OpenPsi] Starting evaluation of psi-rule ~a"
-                rule)
+            (cog-logger-debug opl "Starting evaluation of psi-rule ~a" rule)
 
             ; The #t condition is for evaluatable-contexts. These are
             ; contexts that only have evaluatable-terms that return TRUE_TV
@@ -110,14 +125,12 @@
             ; results in the achievement of the goals, even if the context of
             ; the other rules aren't not satisfied.
             (map cog-evaluate! goals)
-            (cog-logger-debug "[OpenPsi] Finished evaluating of psi-rule ~a"
-                rule)
+            (cog-logger-debug opl "Finished evaluating of psi-rule ~a" rule)
         ))
 
     (set! psi-loop-count (+ psi-loop-count 1))
 
-    (cog-logger-debug "[OpenPsi] Taking one psi-step, loop-count = ~a"
-        psi-loop-count)
+    (cog-logger-debug opl "Taking one psi-step, loop-count = ~a" psi-loop-count)
 
     ; Run the controller that updates the weight.
     (psi-controller-update-weights)
@@ -137,9 +150,17 @@
         (psi-get-all-enabled-demands)
     )
 
-    (cog-logger-debug "[OpenPsi] Ending psi-step, loop-count = ~a"
-        (psi-get-loop-count))
+    ; Do garbage collection. This is a replacement to (run-behavior-tree-gc)
+    (when (equal? 0 (modulo psi-loop-count 1000))
+        (cog-map-type (lambda (a) (cog-extract a) #f) 'SetLink)
+        (cog-map-type (lambda (a) (cog-extract a) #f) 'ListLink)
+        (cog-map-type (lambda (a) (cog-extract a) #f) 'NumberNode)
+        (cog-map-type (lambda (a) (cog-extract a) #f) 'ConceptNode)
+        (cog-logger-debug opl
+            "Finished garbage collection, loop-count = ~a" psi-loop-count)
+    )
 
+    (cog-logger-debug opl "Ending psi-step, loop-count = ~a" psi-loop-count)
     (stv 1 1) ; For continuing psi-run loop.
 )
 
@@ -150,7 +171,7 @@
 ; psi rules.  For now, this is OK, but at some point, this will become
 ; a bottleneck, as we will need to evaluate more rules more often.
 ;
-(define-public (psi-run)
+(define (psi-run)
 "
   psi-run
 
@@ -186,7 +207,7 @@
 
 ; -------------------------------------------------------------
 
-(define-public (psi-halt)
+(define (psi-halt)
 "
   psi-halt
 
