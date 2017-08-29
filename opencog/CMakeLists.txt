@@ -38,6 +38,6 @@ IF (HAVE_CYTHON)
 ENDIF (HAVE_CYTHON)
 
 ADD_SUBDIRECTORY (embodiment)
-ADD_SUBDIRECTORY (destin)
+ADD_SUBDIRECTORY (moviedb)
 # Graphics and visualization subsystems
 ADD_SUBDIRECTORY (visualization)
